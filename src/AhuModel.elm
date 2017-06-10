@@ -1,180 +1,212 @@
 module AhuModel exposing (..)
 import Time exposing (Time, second)
 
-type alias Model = { sa_t : Float -- supply air temperature
-                   , oa_p : Float --outside air percentage, from 0.0 to 100.0
-                   , cfm : Float -- supply air flow rate, cubic feet per minute
-                   , oa_t : Float -- outside air temperature in Fahrenheit
-                   , oa_wb : Float -- outside air web bulb, function of outside humidity
-                   , tons : Float -- building cooling load, tons of ice melting per day
+-- Properties and Units
+
+type AbsoluteHumidity = AirDensity Float
+type Enthalpy = BTUsPerPound Float
+type Pressure = PSI Float
+type RelativeHumidity = HPercent Float
+type RelativeHumidityRate = HPercentPerHour Float
+type Temperature = Fahrenheit Float
+type TemperatureRate = FahrenheitPerHour Float
+type AirFlow = CubicFeetPerMinute Float
+type alias Percent = Float
+type Density = LbPerCubicFoot Float
+type SpecificHeat = BtuPerLbF Float
+type Power = BtuPerHour Float | Tons Float
+type alias Air = { t : Temperature
+                 , rh : RelativeHumidity
+                 }
+
+-- Constants and Conversions
+atm = PSI 14.696 -- standard atmosphere
+specific_heat_air = BtuPerLbF 0.241
+air_density = LbPerCubicFoot (1/13.2)
+
+inTons: Power -> Float
+inTons p = case p of
+               (BtuPerHour b) -> (b/12000)
+               (Tons t) -> t
+
+inBtusPerHour: Power -> Float
+inBtusPerHour p = case p of
+               (BtuPerHour b) -> b
+               (Tons t) -> t*12000
+
+-- Quantities for the model of the system
+
+type alias Model = { supply_air : Air
+                   , oa_p : Percent --outside air percentage
+                   , cfm : AirFlow -- supply air flow rate
+                   , outside_air : Air
+                   , load : Power -- building cooling load
                    , shf : Float -- sensible heat factor qsense/qtotal, dimensionless from 0.0 to 1.0
-                   , cycle : Float
-                   , time : Float -- value between 0.0 and 1.0
-                   , room_rh : Float -- room relative humidity percentage, from 0.0 to 100.0
-                   , room_t : Float -- room temperature in Fahrenheit
-                   , room_h : Float -- room enthalpy in BTUs per pound
+                   , cycle : Time -- Duration of animation cycle (Seconds)
+                   , time : Float -- Fraction of animation cycle complete (between 0.0 and 1.0)
+                   , room_air : Air
                    }
 
-init : (Model, Cmd Msg)
-init = (
-        { sa_t = 62
-        , oa_p = 30
-        , cfm = 30000
-        , oa_t = 90
-        , oa_wb = 84
-        , tons = 65
-        , shf = 0.90
-        , cycle = 10
-        , time = 0
-        , room_rh = 50
-        , room_t = 80
-        , room_h = 0.015
-        }
-       , Cmd.none)
 
-type Msg = IncrementOap (Model->Float) Float
-         | IncrementSat (Model->Float) Float
-         | IncrementCfm (Model->Float) Float
-         | IncrementOat (Model->Float) Float
-         | IncrementOawb (Model->Float) Float
-         | IncrementTons (Model->Float) Float
-         | IncrementShf (Model->Float) Float
-         | IncrementCycle (Model->Float) Float
-         | Tick Time
+-- Initial values for quantities for the system model
 
-pressure = 14.696 -- barometric pressure in psia
+init_model = { supply_air = { t = Fahrenheit 62
+                            , rh = supply_rel_humidity (Fahrenheit 62)
+                            }
+             , oa_p = 30
+             , cfm = CubicFeetPerMinute 30000
+             , outside_air = { t = Fahrenheit 90
+                             , rh = wetBulbToRelativeHumidity 84
+                             }
+             , load = Tons 65
+             , shf = 0.90
+             , cycle = 10
+             , time = 0
+             , room_air = { t = Fahrenheit 80
+                          , rh = HPercent 50
+                          }
+             }
 
-h2o_saturation_vapor_pressure farenheit_temperature =
--- convert to Rankine
-    let t = farenheit_temperature + 459.67
+
+supply_rel_humidity: Temperature -> RelativeHumidity
+supply_rel_humidity supply_t =
+    let
+        (Fahrenheit t) = supply_t
+    in
+        if t<60 then
+            HPercent 95
+        else
+            HPercent (95 - (t - 60)*3)
+
+-- FIXME: this is probably wrong
+wetBulbToRelativeHumidity x = HPercent x
+
+-- FIXME: this is probably wrong
+absToRh: AbsoluteHumidity -> RelativeHumidity
+absToRh (AirDensity ah) = HPercent ah
+
+-- Thermodynamic Equations
+
+h2o_saturation_vapor_pressure: Temperature -> Pressure
+h2o_saturation_vapor_pressure (Fahrenheit t_fah) =
+    let
+        t = t_fah + 459.67 -- convert to Rankine
+        p_sat = e^(-10440.4/t - 11.29465
+                  - 0.027022355*t
+                      + 1.289036e-5*t*t
+                          - 2.4780681e-9*t*t*t+6.5459673*logBase e t)
     in
         -- sat vapor pressure
-        e^(-10440.4/t - 11.29465
-          - 0.027022355*t
-              + 1.289036e-5*t*t
-                  - 2.4780681e-9*t*t*t+6.5459673*logBase e t)
+        PSI p_sat
 
--- w is absolute humidity
--- t is temperature
-enthalpy w t = ((0.24+0.444*w)*t + 1061*w)
+
+enthalpy: AbsoluteHumidity -> Temperature -> Enthalpy
+enthalpy absolute_humidity temperature =
+    let
+        (Fahrenheit t) = temperature
+        (AirDensity w) = absolute_humidity
+    in
+        BTUsPerPound ((0.24+0.444*w)*t + 1061*w)
+
 
 -- mass of water vapor per mass of air; dimensionless
-abs_humidity rel_humidity temperature air_partial_pressure =
+abs_humidity: Air -> AbsoluteHumidity
+abs_humidity air =
     let
--- partial pressure of water
-        h2o_partial_pressure = (rel_humidity/100)*(h2o_saturation_vapor_pressure temperature)
+        t = air.t
+
+        -- partial pressure of water
+        (PSI p_h2o_sat) = h2o_saturation_vapor_pressure t
+        (HPercent rh) = air.rh
+        h2o_partial_pressure = p_h2o_sat * rh/100
+        p_h2o = h2o_partial_pressure
+        (PSI p_air) = atm
     in
-        0.62198*(h2o_partial_pressure/(air_partial_pressure - h2o_partial_pressure))
+        AirDensity (0.62198*(p_h2o/(p_air - p_h2o)))
 
-
-cfpp = 13.2 -- cubic_ft_per_pound
-mph = 60 -- 60 minutes per hour
 
 -- total heat flow in
-total_heat_flow sa_cfm room_w room_t supply_w supply_t =
-  let
-    room_h = enthalpy room_w room_t -- btu per pound
-    supply_h = enthalpy supply_w supply_t
-  in
-    sa_cfm*mph*(room_h - supply_h)/(cfpp*btu_per_ton)
-
-a = total_heat_flow 1.0 1.0 1.0 1.0 1.0
-
-
-room_abs_hum model = abs_humidity model.room_rh model.room_t pressure
-supply_rel_hum = 0.95
-supply_abs_hum model = abs_humidity supply_rel_hum model.sa_t pressure
+q_inflow: Model -> Power
 q_inflow model =
     let
-        room_ah = room_abs_hum model
-        supply_ah = supply_abs_hum model
+        room_t = model.room_air.t
+        supply_t = model.supply_air.t
+
+        room_ah = abs_humidity model.room_air
+        supply_ah = abs_humidity model.supply_air
+
+        (BTUsPerPound room_h) = enthalpy room_ah room_t
+        (BTUsPerPound supply_h) = enthalpy supply_ah supply_t
+        delta_h = room_h - supply_h
+
+        (LbPerCubicFoot rho) = air_density
+        (CubicFeetPerMinute cfm) = model.cfm
+        sa_lb_per_hour = 60 * cfm * rho
+        qinflow = sa_lb_per_hour*delta_h
     in
-        total_heat_flow model.cfm room_ah model.room_t supply_ah model.sa_t
-
-shf_inflow model = cool_supply model / (q_inflow model)
-
--- btu per (lb.deg F)
-air_specific_heat = 0.241
+        BtuPerHour qinflow
 
 
-btu_per_ton = 12000
-
--- sensible cool supply in tons
+-- sensible cool supply rate in tons per Hour
+cool_supply: Model -> Power
 cool_supply model =
     let
-        cp = air_specific_heat
+        (LbPerCubicFoot rho) = air_density
+        (CubicFeetPerMinute cfm) = model.cfm
+        lb_air_per_hour = 60 * cfm * rho
+        (Fahrenheit room_t) = model.room_air.t
+        (Fahrenheit supply_t) = model.supply_air.t
+        delta_t = room_t - supply_t
+        (BtuPerLbF cp) = specific_heat_air
+        load = lb_air_per_hour*cp*delta_t
     in
-        model.cfm*60*cp*(model.room_t - model.sa_t)/(cfpp*btu_per_ton)
+        BtuPerHour load
 
 
-new_room_t model =
+-- sensible heat factor is the ratio of cooling supply to heat flow in
+shf_inflow: Model -> Float
+shf_inflow model =
     let
-        cp = air_specific_heat
+        supply = inBtusPerHour <| cool_supply model
+        flow = inBtusPerHour <| q_inflow model
     in
-        model.room_t + (((model.tons*model.shf - cool_supply model)*btu_per_ton/cp)/1000000.0)
+        supply/flow
 
 
-room_t old_room_t q shf cool_supply cp = old_room_t + (q*shf - cool_supply)/cp
-
-
-room_h room_w room_t = enthalpy room_w room_t
-
-new_room_rel_humidity model =
+change_room_t: Model -> TemperatureRate
+change_room_t model =
     let
-        q = model.tons
+        (BtuPerLbF cp) = specific_heat_air
+        load = inBtusPerHour model.load
+        supply = inBtusPerHour <| cool_supply model
+    in
+        FahrenheitPerHour (((load*model.shf - supply)/cp))
+
+-- FIXME: This looks wrong
+change_room_rel_humidity: Model -> RelativeHumidityRate
+change_room_rel_humidity model =
+    let
+        q = inBtusPerHour model.load
         shf = model.shf
-        sa_cfm = model.cfm
-        room_w = abs_humidity model.room_rh model.room_t pressure
-        supply_t = model.sa_t
-        supply_w = abs_humidity (supply_rel_humidity model.sa_t) model.sa_t pressure
+        (CubicFeetPerMinute sa_cfm) = model.cfm
+        (AirDensity room_w) = abs_humidity model.room_air
+        (AirDensity supply_w) = abs_humidity model.supply_air
+        (Fahrenheit supply_t) = model.supply_air.t
         something = (1093 - 0.444*supply_t)/(13.2*12000)
     in
-        model.room_rh +
-            (q*(1-shf) - (room_w - supply_w)*sa_cfm*60*something)/100
+        HPercentPerHour ((q*(1-shf) - (room_w - supply_w)*sa_cfm*60*something)/100)
 
-comfort_temp_max = 80
-comfort_temp_min = 70
-comfort_rh_max = 60
-comfort_rh_min = 30
 
-room_comment model =
+-- new room state after one hour
+new_room_air: Model -> Air
+new_room_air model =
     let
-        room_rh = model.room_rh
-        room_t = model.room_t
+        (FahrenheitPerHour t_dot) = change_room_t model
+        (HPercentPerHour delta_rh) = change_room_rel_humidity model
+        (HPercent rel_h) = model.room_air.rh
+        (Fahrenheit room_t) = model.room_air.t
+        delta_t = t_dot -- change in temperature in one hour
     in
-      if room_rh > comfort_rh_max then
-          "Ugh!  It's too humid. "++(toString <| roundn 2 <| room_rh )
-      else if room_rh < comfort_rh_min then
-              "It's too dry. "++(toString room_rh )
-          else if room_t > comfort_temp_max then
-                    "Whew!  It's too hot in here! "++(toString <| roundn 2 <| room_t )
-                else if room_t < comfort_temp_min then
-                        "Brrr!  It's too cold in here! "++(toString <| roundn 2 <| room_t )
-                    else
-                        ""
-
-outside_w model =
-    let
-        pw_star = h2o_saturation_vapor_pressure model.oa_wb
-        w_star model = abs_humidity pw_star model.oa_t pressure
-    in
-        ((1093 - 0.556*model.oa_wb)*(w_star model) - 0.24*(model.oa_t - model.oa_wb))/(1093 + 0.444*model.oa_t - model.oa_wb)
-
-
-supply_rel_humidity supply_t = if supply_t<60 then
-                          95
-                      else
-                          95 - (supply_t - 60)*3
-
-
-supply_w rh t p = abs_humidity  rh t p
-
-roundn : Int -> Float -> Float
-roundn n x =
-    let
-        f = toFloat ( 10^n )
-        hundred = f*x
-        fh = toFloat (round hundred)
-    in
-        -- toFloat (round (x*f))/f
-        fh/f
+        { t = Fahrenheit (room_t + delta_t)
+        , rh = HPercent (rel_h + delta_rh)
+        }
