@@ -20,8 +20,13 @@ type alias Air = { t : Temperature
                  }
 
 -- Constants and Conversions
+atm: Pressure
 atm = PSI 14.696 -- standard atmosphere
+
+specific_heat_air: SpecificHeat
 specific_heat_air = BtuPerLbF 0.241
+
+air_density: Density
 air_density = LbPerCubicFoot (1/13.2)
 
 inTons: Power -> Float
@@ -33,6 +38,26 @@ inBtusPerHour: Power -> Float
 inBtusPerHour p = case p of
                (BtuPerHour b) -> b
                (Tons t) -> t*12000
+
+toTime: String -> Time
+toTime s = case String.toFloat s of
+               Ok f -> f
+               Err m -> 0.0
+
+toTons: String -> Power
+toTons s = case String.toFloat s of
+               Ok f -> Tons f
+               Err m -> Tons 0.0
+
+toAirflow: String -> AirFlow
+toAirflow s = case String.toFloat s of
+               Ok f -> CubicFeetPerMinute f
+               Err m -> CubicFeetPerMinute 0.0
+
+toHPercent: String -> RelativeHumidity
+toHPercent s = case String.toFloat s of
+               Ok f -> HPercent f
+               Err m -> HPercent 0.0
 
 -- Quantities for the model of the system
 
@@ -206,7 +231,8 @@ new_room_air model =
         (HPercent rel_h) = model.room_air.rh
         (Fahrenheit room_t) = model.room_air.t
         delta_t = t_dot -- change in temperature in one hour
+        scale = 0.000000001
     in
-        { t = Fahrenheit (room_t + delta_t)
-        , rh = HPercent (rel_h + delta_rh)
+        { t = Fahrenheit (room_t + delta_t*scale)
+        , rh = HPercent (rel_h + delta_rh*scale)
         }

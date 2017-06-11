@@ -1,5 +1,10 @@
 module Ahu exposing (..)
 
+import Html exposing (Attribute, div, text, input)
+import Html.Attributes as H exposing (min, max, value)
+import Html.Events exposing (on, onInput)
+import String
+
 import AhuModel exposing (..)
 import AhuText exposing (ahutext)
 import Char exposing (..)
@@ -32,14 +37,14 @@ time_mod time model =
     in
         (t - ct*(toFloat (floor(t/ct))))/ct
 
-type Msg = IncrementOap (Model->Float) Float
-         | IncrementSat (Model->Float) Float
-         | IncrementCfm (Model->Float) Float
-         | IncrementOat (Model->Float) Float
-         | IncrementOawb (Model->Float) Float
-         | IncrementTons (Model->Float) Float
-         | IncrementShf (Model->Float) Float
-         | IncrementCycle (Model->Float) Float
+type Msg = SetCfm String
+         | SetCycle String
+         | SetOap String
+         | SetOat String
+         | SetOawb String
+         | SetSat String
+         | SetShf String
+         | SetTons String
          | Tick Time
 
 get_oa_t: Model -> Float
@@ -68,24 +73,28 @@ roundn n x =
         -- toFloat (round (x*f))/f
         fh/f
 
+toTemp: String -> Temperature
+toTemp s = case String.toFloat s of
+               Ok f -> Fahrenheit f
+               Err m -> Fahrenheit 0.0
+
+stringToFloat: String -> Float
+stringToFloat s = case String.toFloat s of
+               Ok f -> f
+               Err m -> 0.0
+
 update : Msg -> Model -> (Model, Cmd Msg)
 update msg model =
     let
         new_model = case msg of
-                        IncrementOap f dd -> { model | oa_p = (Basics.max 20.0 (Basics.min 100.0 (f model + dd)))}
-                        IncrementSat f dd -> { model | supply_air = { t = Fahrenheit (Basics.max 45.0 (Basics.min 60.0 (f model + dd)))
-                                                                    , rh = model.supply_air.rh
-                                                                    }}
-                        IncrementCfm f dd -> { model | cfm = CubicFeetPerMinute (Basics.max 20000.0 (Basics.min 40000.0 (f model + dd)))}
-                        IncrementOat f dd -> { model | outside_air = { t = Fahrenheit (Basics.max 65.0 (Basics.min 94.0 (f model + dd)))
-                                                                     , rh = model.outside_air.rh
-                                                                     }}
-                        IncrementOawb f dd -> { model | outside_air = { rh = wetBulbToRelativeHumidity (Basics.max 65.0 (Basics.min 94.0 (f model + dd)))
-                                                                      , t = model.outside_air.t
-                                                                      } }
-                        IncrementTons f dd -> { model | load = Tons (Basics.max 40.0 (Basics.min 100.0 (f model + dd)))}
-                        IncrementShf f dd -> { model | shf = (Basics.max 0.0 (Basics.min 1.0 (f model + dd)))}
-                        IncrementCycle f dd -> { model | cycle = f model + dd}
+                        SetOap p -> { model | oa_p = stringToFloat p }
+                        SetCfm f -> { model | cfm = toAirflow f }
+                        SetShf f -> { model | shf = stringToFloat f / 100 }
+                        SetTons f -> { model | load = toTons f }
+                        SetOawb rh -> { model | outside_air = { t = model.outside_air.t, rh = toHPercent rh }  }
+                        SetCycle f -> { model | cycle = toTime f }
+                        SetSat t -> { model | supply_air = { t = toTemp t, rh = model.supply_air.rh }  }
+                        SetOat t -> { model | outside_air = { t = toTemp t, rh = model.outside_air.rh }  }
                         Tick newTime -> { model | time = time_mod newTime model
                                         , room_air = new_room_air model
                                         }
@@ -131,23 +140,22 @@ view model =
                 -- [ Html.text "Adjust system"
                 [ Html.text "Setup the system by specifying weather..."
                 , div [redStyle]
-                    [ control IncrementOat get_oa_t 1 "Outside Air Temp" model
-                    , control IncrementOawb get_oa_rh 3 "Outside Air Wet Bulb" model
+                    [ control SetOat 65.0 94.0 get_oa_t "Outside Air Temp" model
+                    , control SetOawb 65.0 94.0 get_oa_rh "Outside Air Wet Bulb" model
                     ]
                 , Html.p [] []
                 , Html.text "Setup the system by specifying load..."
                 , div [grayStyle]
-                    [ control IncrementTons get_load 5 "Tons" model
-                    , control IncrementShf .shf 0.05 "SHF" model -- TODO: limit precision
-                    , control IncrementCycle .cycle 1 "sim cycle (seconds)" model
-                    , control IncrementShf .time 0.05 "Time" model
+                    [ control SetTons 40.0 100.0 get_load "Tons" model
+                    , control SetShf 0.0 100.0 ((*) 100 << .shf) "SHF" model -- TODO: limit precision
+                    , control SetCycle 0.0 30.0 .cycle "sim cycle (seconds)" model
                     ]
                 , Html.p [] []
                 , Html.text "Now adjust the system to maintain comfort."
                 , div [blueStyle]
-                    [ control IncrementOap .oa_p 5 "Outside Air %" model
-                    , control IncrementSat get_sa_t 1 "Supply Air Temp" model
-                    , control IncrementCfm get_cfm 1000 "CFM" model
+                    [ control SetOap 20.0 100.0 .oa_p "Outside Air %" model
+                    , control SetSat 45.0 60.0 get_sa_t "Supply Air Temp" model
+                    , control SetCfm 20000.0 40000.0 get_cfm "CFM" model
                     ]
                 ]
            , div [ show_style ]
@@ -157,6 +165,7 @@ view model =
                 , show "sensible heat factor of the building:" shf_in, Html.p [] []
                 , show "Heat entering the building:" q_in, Html.p [] []
                 , show "room_abs_hum" <| room_rh, Html.p [] []
+                , show "time" <| model.time, Html.p [] []
                 ]
            , div [ Html.Attributes.style [ ( "margin-left", "100px")] ]
                 [ svg [viewBox "0 0 600 400", Svg.Attributes.width "100%" ]
@@ -453,12 +462,21 @@ psych_chart model =
                     , comfort_zone
                     ]
 
-control: ((Model -> Float) -> Float -> Msg) -> (Model -> Float) -> Float -> String -> Model -> (Html Msg)
-control inc get diff label model = div []
-                             [ button [ onClick (inc get -diff), Html.Attributes.style [("float", "left")] ] [ Html.text "-" ]
-                             , Html.text (label ++ " " ++ (toString (roundn 2 (get model))))
-                             , button [ onClick (inc get diff), Html.Attributes.style [("float", "right")] ] [ Html.text "+" ]
-                             ]
+control: (String -> Msg) -> Float -> Float -> (Model -> Float) -> String -> Model -> (Html Msg)
+control set minval maxval get label model =
+    let
+        val = toString << roundn 2 << get <| model
+    in
+    div []
+        [ input
+              [ type_ "range"
+              , H.min <| toString minval
+              , H.max <| toString maxval
+              , value val
+              , onInput set
+              ] []
+        , Html.text (label ++ " " ++ val)
+        ]
 
 inlineStyle = Html.Attributes.style
         [ ( "display", "inline" )
