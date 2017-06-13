@@ -218,15 +218,19 @@ change_room_t model =
 change_room_rel_humidity: Model -> RelativeHumidityRate
 change_room_rel_humidity model =
     let
-        q = inBtusPerHour model.load
         shf = model.shf
+        load = inBtusPerHour model.load
+        supply = inBtusPerHour <| cool_supply model
         (CubicFeetPerMinute sa_cfm) = model.cfm
         (MolecularRatio room_w) = humidity_ratio model.room_air
         (MolecularRatio supply_w) = humidity_ratio model.supply_air
         (Fahrenheit supply_t) = model.supply_air.t
         something = (1093 - 0.444*supply_t)/(13.2*12000)
+        q_total = inBtusPerHour model.load
+        q_sensible = shf * supply
+        delta_q_latent = q_total - q_sensible
     in
-        HPercentPerHour ((q*(1-shf) - (room_w - supply_w)*sa_cfm*60*something)/100)
+        HPercentPerHour ((delta_q_latent - (room_w - supply_w)*sa_cfm*60*something)/100)
 
 
 -- new room state after one hour
