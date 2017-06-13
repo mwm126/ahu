@@ -241,25 +241,6 @@ change_room_t model =
     in
         FahrenheitPerHour (((load*shf - supply)/cp))
 
--- -- from https://planetcalc.com/2161/
--- saturation_vapor_pressure: Temperature -> Pressure -> Pressure
--- saturation_vapor_pressure temperature pressure =
---     let
---         t = inCelsius temperature
---         p = inHectoPascals pressure
---         f_p = 1.0016 + 3.15*p/1000000 - 0.074/p
---         e_w = 6.112 * e^(17.62*t/(243.12+t))
---     in
---         HectoPascals (f_p * e_w)
-
--- relative_humidity: AbsoluteHumidity -> RelativeHumidity
--- relative_humidity ah =
---     let
---         t = model.outside_air.t
---         sat_p = saturation_vapor_pressure t atm
---     in
---         sat_p
-
 
 -- FIXME: This looks wrong
 change_room_rel_humidity: Model -> RelativeHumidityRate

@@ -224,6 +224,7 @@ duct_width = 8*air_radius
 -- house offsets
 house_x: Temperature
 house_x = Fahrenheit 10
+house_y: Float
 house_y = 10
 
 house model =
