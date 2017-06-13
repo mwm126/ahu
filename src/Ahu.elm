@@ -308,13 +308,13 @@ mixed_th: Model -> (Temperature, RelativeHumidity)
 mixed_th model = avg_th (room_th model) (outside_th model) (model.oa_p/100)
 
 room_th: Model -> (Temperature, RelativeHumidity)
-room_th model = (model.room_air.t, absToRh <| abs_humidity model.room_air )
+room_th model = (model.room_air.t, absToRh <| humidity_ratio model.room_air )
 
 sa_th: Model -> (Temperature, RelativeHumidity)
-sa_th model = (model.supply_air.t, absToRh <| abs_humidity model.supply_air )
+sa_th model = (model.supply_air.t, absToRh <| humidity_ratio model.supply_air )
 
 outside_th: Model -> (Temperature, RelativeHumidity)
-outside_th model = (model.outside_air.t, absToRh <| abs_humidity model.outside_air )
+outside_th model = (model.outside_air.t, absToRh <| humidity_ratio model.outside_air )
 
 avg_th : (Temperature,RelativeHumidity) -> (Temperature,RelativeHumidity) -> Float -> (Temperature,RelativeHumidity)
 avg_th xy1 xy2 t =
@@ -440,10 +440,10 @@ psych_chart model =
         p_vert (x,y) = make_line "black" (x,y) (x,1000)
         r = "blue"
         some_temperature = 50 -- I don't know what this should be
-        c1 = th_to_xy (comfort_temp_min, absToRh <| abs_humidity { rh=comfort_rh_min, t=comfort_temp_min})
-        c2 = th_to_xy (comfort_temp_min, absToRh <| abs_humidity { rh=comfort_rh_max, t=comfort_temp_min})
-        c3 = th_to_xy (comfort_temp_max, absToRh <| abs_humidity { rh=comfort_rh_max, t=comfort_temp_max})
-        c4 = th_to_xy (comfort_temp_max, absToRh <| abs_humidity { rh=comfort_rh_min, t=comfort_temp_max})
+        c1 = th_to_xy (comfort_temp_min, absToRh <| humidity_ratio { rh=comfort_rh_min, t=comfort_temp_min})
+        c2 = th_to_xy (comfort_temp_min, absToRh <| humidity_ratio { rh=comfort_rh_max, t=comfort_temp_min})
+        c3 = th_to_xy (comfort_temp_max, absToRh <| humidity_ratio { rh=comfort_rh_max, t=comfort_temp_max})
+        c4 = th_to_xy (comfort_temp_max, absToRh <| humidity_ratio { rh=comfort_rh_min, t=comfort_temp_max})
         comfort_zone = [ make_line r c1 c2
                        , make_line r c2 c3
                        , make_line r c3 c4

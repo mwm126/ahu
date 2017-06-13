@@ -3,7 +3,8 @@ import Time exposing (Time, second)
 
 -- Properties and Units
 
-type AbsoluteHumidity = AirDensity Float
+-- type AbsoluteHumidity = AirDensity Float
+type HumidityRatio = MolecularRatio Float
 type Enthalpy = BTUsPerPound Float
 type Pressure = PSI Float
 type RelativeHumidity = HPercent Float
@@ -75,6 +76,7 @@ type alias Model = { supply_air : Air
 
 -- Initial values for quantities for the system model
 
+-- init_model: { supply_air: Temperature, oa_p: Percent }
 init_model = { supply_air = { t = Fahrenheit 62
                             , rh = supply_rel_humidity (Fahrenheit 62)
                             }
@@ -107,8 +109,8 @@ supply_rel_humidity supply_t =
 wetBulbToRelativeHumidity x = HPercent x
 
 -- FIXME: this is probably wrong
-absToRh: AbsoluteHumidity -> RelativeHumidity
-absToRh (AirDensity ah) = HPercent ah
+absToRh: HumidityRatio -> RelativeHumidity
+absToRh (MolecularRatio ah) = HPercent ah
 
 -- Thermodynamic Equations
 
@@ -125,18 +127,18 @@ h2o_saturation_vapor_pressure (Fahrenheit t_fah) =
         PSI p_sat
 
 
-enthalpy: AbsoluteHumidity -> Temperature -> Enthalpy
+enthalpy: HumidityRatio -> Temperature -> Enthalpy
 enthalpy absolute_humidity temperature =
     let
         (Fahrenheit t) = temperature
-        (AirDensity w) = absolute_humidity
+        (MolecularRatio w) = absolute_humidity
     in
         BTUsPerPound ((0.24+0.444*w)*t + 1061*w)
 
 
 -- mass of water vapor per mass of air; dimensionless
-abs_humidity: Air -> AbsoluteHumidity
-abs_humidity air =
+humidity_ratio: Air -> HumidityRatio
+humidity_ratio air =
     let
         t = air.t
 
@@ -147,7 +149,7 @@ abs_humidity air =
         p_h2o = h2o_partial_pressure
         (PSI p_air) = atm
     in
-        AirDensity (0.62198*(p_h2o/(p_air - p_h2o)))
+        MolecularRatio (0.62198*(p_h2o/(p_air - p_h2o)))
 
 
 -- total heat flow in
@@ -157,8 +159,8 @@ q_inflow model =
         room_t = model.room_air.t
         supply_t = model.supply_air.t
 
-        room_ah = abs_humidity model.room_air
-        supply_ah = abs_humidity model.supply_air
+        room_ah = humidity_ratio model.room_air
+        supply_ah = humidity_ratio model.supply_air
 
         (BTUsPerPound room_h) = enthalpy room_ah room_t
         (BTUsPerPound supply_h) = enthalpy supply_ah supply_t
@@ -214,8 +216,8 @@ change_room_rel_humidity model =
         q = inBtusPerHour model.load
         shf = model.shf
         (CubicFeetPerMinute sa_cfm) = model.cfm
-        (AirDensity room_w) = abs_humidity model.room_air
-        (AirDensity supply_w) = abs_humidity model.supply_air
+        (MolecularRatio room_w) = humidity_ratio model.room_air
+        (MolecularRatio supply_w) = humidity_ratio model.supply_air
         (Fahrenheit supply_t) = model.supply_air.t
         something = (1093 - 0.444*supply_t)/(13.2*12000)
     in
