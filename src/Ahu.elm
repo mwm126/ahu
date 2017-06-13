@@ -48,13 +48,13 @@ type Msg = SetCfm String
          | Tick Time
 
 get_oa_t: Model -> Float
-get_oa_t model = let (Fahrenheit t) = model.outside_air.t in t
+get_oa_t model = inFahrenheit model.outside_air.t
 
 get_oa_rh: Model -> Float
 get_oa_rh model = let (HPercent x) = model.outside_air.rh in x
 
 get_sa_t: Model -> Float
-get_sa_t model = let (Fahrenheit t) = model.supply_air.t in t
+get_sa_t model = inFahrenheit model.supply_air.t
 
 get_cfm: Model -> Float
 get_cfm model = let (CubicFeetPerMinute cfm) = model.cfm in cfm
@@ -105,12 +105,14 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model = Time.every (0.1 * second) Tick
 
+ctrl_style: Html.Attribute Msg
 ctrl_style = Html.Attributes.style
         [ ( "float", "left" )
         , ( "width", "50%" )
         , ( "display", "inline-block" )
         ]
 
+show_style: Html.Attribute Msg
 show_style = Html.Attributes.style
         [ ( "float", "right" )
         , ( "width", "50%" )
@@ -122,12 +124,12 @@ view model =
     let
         pro_x = 250.0
         pro_y = 30
-        r2 x = toString <| roundn 2 x
+        r2 x = toString <| roundn 20 x
         show name value = Html.text (name ++ " = " ++ r2 value)
 
         q_in = inTons <| q_inflow model
         shf_in = shf_inflow model
-        (Fahrenheit room_t) = model.room_air.t
+        room_t = inFahrenheit model.room_air.t
         (HPercent room_rh) = model.room_air.rh
     in
   Html.article [] [
@@ -138,16 +140,16 @@ view model =
                                             ] ] [
             div [ ctrl_style ]
                 -- [ Html.text "Adjust system"
-                [ Html.text "Setup the system by specifying weather..."
+                [ Html.text "Specify the weather outdoors..."
                 , div [redStyle]
-                    [ control SetOat 65.0 94.0 get_oa_t "Outside Air Temp" model
-                    , control SetOawb 65.0 94.0 get_oa_rh "Outside Air Wet Bulb" model
+                    [ control SetOat 65.0 94.0 get_oa_t "Outside Air Temp (°F)" model
+                    , control SetOawb 65.0 94.0 get_oa_rh "Outside Air Wet Bulb (°F)" model
                     ]
                 , Html.p [] []
                 , Html.text "Setup the system by specifying load..."
                 , div [grayStyle]
-                    [ control SetTons 40.0 100.0 get_load "Tons" model
-                    , control SetShf 0.0 100.0 ((*) 100 << .shf) "SHF" model -- TODO: limit precision
+                    [ control SetTons 40.0 100.0 get_load "Cooling Load (Tons)" model
+                    , control SetShf 0.0 100.0 ((*) 100 << .shf) "SHF %" model -- TODO: limit precision
                     , control SetCycle 0.0 30.0 .cycle "sim cycle (seconds)" model
                     ]
                 , Html.p [] []
@@ -160,8 +162,11 @@ view model =
                 ]
            , div [ show_style ]
                 [ Html.text "The results are:", Html.p [] []
+                -- , show "saturation vapor pressure" (inPSI <| saturation_vapor_pressure (Fahrenheit 53) atm), Html.p [] []
+                , show "h20 saturation vapor pressure" (inPSI <| h2o_saturation_vapor_pressure (Fahrenheit 80)), Html.p [] []
                 , Html.text (room_comment model), Html.p [] []
                 , show "temperature inside the building" room_t, Html.p [] []
+                , show "humidity inside the building" (inPercent model.room_air.rh), Html.p [] []
                 , show "sensible heat factor of the building:" shf_in, Html.p [] []
                 , show "Heat entering the building:" q_in, Html.p [] []
                 , show "room_abs_hum" <| room_rh, Html.p [] []
@@ -179,20 +184,24 @@ view model =
            ]
       ]
 
+comfort_temp_max: Temperature
 comfort_temp_max = Fahrenheit 80
+comfort_temp_min: Temperature
 comfort_temp_min = Fahrenheit 70
+comfort_rh_max: RelativeHumidity
 comfort_rh_max = HPercent 60
+comfort_rh_min: RelativeHumidity
 comfort_rh_min = HPercent 30
 
 room_comment: Model -> String
 room_comment model =
     let
         (HPercent room_rh) = model.room_air.rh
-        (Fahrenheit room_t) = model.room_air.t
+        room_t = inFahrenheit model.room_air.t
         (HPercent rh_max) = comfort_rh_max
         (HPercent rh_min) = comfort_rh_min
-        (Fahrenheit temp_max) = comfort_temp_max
-        (Fahrenheit temp_min) = comfort_temp_min
+        temp_max = inFahrenheit comfort_temp_max
+        temp_min = inFahrenheit comfort_temp_min
     in
       if room_rh > rh_max then
           "Ugh!  It's too humid. "++(toString <| roundn 2 <| room_rh )
@@ -206,10 +215,14 @@ room_comment model =
                         ""
 
 -- for drawing the house
+air_radius: Float
 air_radius = 10
+duct_height: Float
 duct_height = 3*air_radius
+duct_width: Float
 duct_width = 8*air_radius
 -- house offsets
+house_x: Temperature
 house_x = Fahrenheit 10
 house_y = 10
 
@@ -222,7 +235,7 @@ house model =
         ww = duct_width
         rw = roof_width
         rh = roof_height
-        (Fahrenheit xx) = house_x
+        xx = inFahrenheit house_x
         yy = house_y
         (ax, ay) = .air_location (sprite_states model)
         (rx, ry) = .recirc_air_location (sprite_states model)
@@ -288,7 +301,7 @@ th_to_xy : (Temperature, RelativeHumidity) -> (Float, Float)
 th_to_xy (temp,rel_h) =
     let
         bottom = 400
-        (Fahrenheit t) = temp
+        t = inFahrenheit temp
         (HPercent h) = rel_h
     in
         ((t - 40)*(toFloat bottom-100)/(95-40) + 100, (0.029-h)*(toFloat bottom-100)/(0.029-0.0052) + 100)
@@ -319,8 +332,10 @@ outside_th model = (model.outside_air.t, absToRh <| humidity_ratio model.outside
 avg_th : (Temperature,RelativeHumidity) -> (Temperature,RelativeHumidity) -> Float -> (Temperature,RelativeHumidity)
 avg_th xy1 xy2 t =
     let
-        (Fahrenheit x1, HPercent y1) = xy1
-        (Fahrenheit x2, HPercent y2) = xy2
+        (t1, HPercent y1) = xy1
+        x1 = inFahrenheit t1
+        (t2, HPercent y2) = xy2
+        x2 = inFahrenheit t2
     in
         (Fahrenheit (x1 + (x2-x1)*t), HPercent (y1 + (y2-y1)*t))
 
@@ -361,7 +376,7 @@ type alias Sprites = { recirc_th : (Temperature,RelativeHumidity)
 sprite_states : Model -> Sprites
 sprite_states model =
     let
-        (Fahrenheit xx) = house_x
+        xx = inFahrenheit house_x
         yy = house_y
     in
      if model.time < 0.25 then

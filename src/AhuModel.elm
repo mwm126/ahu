@@ -6,10 +6,11 @@ import Time exposing (Time, second)
 -- type AbsoluteHumidity = AirDensity Float
 type HumidityRatio = MolecularRatio Float
 type Enthalpy = BTUsPerPound Float
-type Pressure = PSI Float
+type Pressure = PSI Float | HectoPascals Float
+type AbsoluteHumidity = GramsPerMeter Float
 type RelativeHumidity = HPercent Float
 type RelativeHumidityRate = HPercentPerHour Float
-type Temperature = Fahrenheit Float
+type Temperature = Fahrenheit Float | Celsius Float
 type TemperatureRate = FahrenheitPerHour Float
 type AirFlow = CubicFeetPerMinute Float
 type alias Percent = Float
@@ -28,10 +29,33 @@ atm = PSI 14.696 -- standard atmosphere
 specific_heat_air: SpecificHeat
 specific_heat_air = BtuPerLbF 0.241
 
+building_heat_capacitance: SpecificHeatExtensive
 building_heat_capacitance = BtuPerF 100000
 
 air_density: Density
 air_density = LbPerCubicFoot (1/13.2)
+
+inPercent: RelativeHumidity -> Float
+inPercent (HPercent p) = p
+
+inPSI: Pressure -> Float
+inPSI p = case p of
+              (HectoPascals hp) -> hp*0.0145038
+              (PSI psi) -> psi
+
+inHectoPascals: Pressure -> Float
+inHectoPascals p = case p of
+               (HectoPascals hp) -> hp
+               (PSI psi) -> psi*68.9476
+inCelsius: Temperature -> Float
+inCelsius t = case t of
+               (Fahrenheit d) -> d
+               (Celsius d) -> (d-32)*5/9
+
+inFahrenheit: Temperature -> Float
+inFahrenheit t = case t of
+               (Fahrenheit d) -> d
+               (Celsius d) -> d*9/5 + 32
 
 inTons: Power -> Float
 inTons p = case p of
@@ -79,7 +103,7 @@ type alias Model = { supply_air : Air
 
 -- Initial values for quantities for the system model
 
--- init_model: { supply_air: Temperature, oa_p: Percent }
+init_model: Model
 init_model = { supply_air = { t = Fahrenheit 62
                             , rh = supply_rel_humidity (Fahrenheit 62)
                             }
@@ -101,7 +125,7 @@ init_model = { supply_air = { t = Fahrenheit 62
 supply_rel_humidity: Temperature -> RelativeHumidity
 supply_rel_humidity supply_t =
     let
-        (Fahrenheit t) = supply_t
+        t = inFahrenheit supply_t
     in
         if t<60 then
             HPercent 95
@@ -109,6 +133,7 @@ supply_rel_humidity supply_t =
             HPercent (95 - (t - 60)*3)
 
 -- FIXME: this is probably wrong
+wetBulbToRelativeHumidity: Float -> RelativeHumidity
 wetBulbToRelativeHumidity x = HPercent x
 
 -- FIXME: this is probably wrong
@@ -118,8 +143,9 @@ absToRh (MolecularRatio ah) = HPercent ah
 -- Thermodynamic Equations
 
 h2o_saturation_vapor_pressure: Temperature -> Pressure
-h2o_saturation_vapor_pressure (Fahrenheit t_fah) =
+h2o_saturation_vapor_pressure temperature =
     let
+        t_fah = inFahrenheit temperature
         t = t_fah + 459.67 -- convert to Rankine
         p_sat = e^(-10440.4/t - 11.29465
                   - 0.027022355*t
@@ -133,7 +159,7 @@ h2o_saturation_vapor_pressure (Fahrenheit t_fah) =
 enthalpy: HumidityRatio -> Temperature -> Enthalpy
 enthalpy absolute_humidity temperature =
     let
-        (Fahrenheit t) = temperature
+        t = inFahrenheit temperature
         (MolecularRatio w) = absolute_humidity
     in
         BTUsPerPound ((0.24+0.444*w)*t + 1061*w)
@@ -146,11 +172,12 @@ humidity_ratio air =
         t = air.t
 
         -- partial pressure of water
-        (PSI p_h2o_sat) = h2o_saturation_vapor_pressure t
+        p_h2o_sat = h2o_saturation_vapor_pressure t
+        p_h2o_sat_psi = inPSI p_h2o_sat
         (HPercent rh) = air.rh
-        h2o_partial_pressure = p_h2o_sat * rh/100
+        h2o_partial_pressure = p_h2o_sat_psi * rh/100
         p_h2o = h2o_partial_pressure
-        (PSI p_air) = atm
+        p_air = inPSI atm
     in
         MolecularRatio (0.62198*(p_h2o/(p_air - p_h2o)))
 
@@ -184,8 +211,8 @@ cool_supply model =
         (LbPerCubicFoot rho) = air_density
         (CubicFeetPerMinute cfm) = model.cfm
         lb_air_per_hour = 60 * cfm * rho
-        (Fahrenheit room_t) = model.room_air.t
-        (Fahrenheit supply_t) = model.supply_air.t
+        room_t = inFahrenheit model.room_air.t
+        supply_t = inFahrenheit model.supply_air.t
         delta_t = room_t - supply_t
         (BtuPerLbF cp) = specific_heat_air
         load = lb_air_per_hour*cp*delta_t
@@ -214,6 +241,26 @@ change_room_t model =
     in
         FahrenheitPerHour (((load*shf - supply)/cp))
 
+-- -- from https://planetcalc.com/2161/
+-- saturation_vapor_pressure: Temperature -> Pressure -> Pressure
+-- saturation_vapor_pressure temperature pressure =
+--     let
+--         t = inCelsius temperature
+--         p = inHectoPascals pressure
+--         f_p = 1.0016 + 3.15*p/1000000 - 0.074/p
+--         e_w = 6.112 * e^(17.62*t/(243.12+t))
+--     in
+--         HectoPascals (f_p * e_w)
+
+-- relative_humidity: AbsoluteHumidity -> RelativeHumidity
+-- relative_humidity ah =
+--     let
+--         t = model.outside_air.t
+--         sat_p = saturation_vapor_pressure t atm
+--     in
+--         sat_p
+
+
 -- FIXME: This looks wrong
 change_room_rel_humidity: Model -> RelativeHumidityRate
 change_room_rel_humidity model =
@@ -224,11 +271,13 @@ change_room_rel_humidity model =
         (CubicFeetPerMinute sa_cfm) = model.cfm
         (MolecularRatio room_w) = humidity_ratio model.room_air
         (MolecularRatio supply_w) = humidity_ratio model.supply_air
-        (Fahrenheit supply_t) = model.supply_air.t
+        supply_t = inFahrenheit model.supply_air.t
         something = (1093 - 0.444*supply_t)/(13.2*12000)
         q_total = inBtusPerHour model.load
         q_sensible = shf * supply
         delta_q_latent = q_total - q_sensible
+        delta_abs_humidity = delta_q_latent / sa_cfm
+        -- saturation vapor pressure
     in
         HPercentPerHour ((delta_q_latent - (room_w - supply_w)*sa_cfm*60*something)/100)
 
@@ -240,9 +289,9 @@ new_room_air model =
         (FahrenheitPerHour t_dot) = change_room_t model
         (HPercentPerHour delta_rh) = change_room_rel_humidity model
         (HPercent rel_h) = model.room_air.rh
-        (Fahrenheit room_t) = model.room_air.t
+        room_t = inFahrenheit model.room_air.t
         delta_t = t_dot -- change in temperature in one hour
-        scale = 0.000000001
+        scale = 0.0001
     in
         { t = Fahrenheit (room_t + delta_t*scale)
         , rh = HPercent (rel_h + delta_rh*scale)
