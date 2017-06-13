@@ -28,7 +28,7 @@ atm = PSI 14.696 -- standard atmosphere
 specific_heat_air: SpecificHeat
 specific_heat_air = BtuPerLbF 0.241
 
-specific_heat_of_building = BtuPerF 100000
+building_heat_capacitance = BtuPerF 100000
 
 air_density: Density
 air_density = LbPerCubicFoot (1/13.2)
@@ -206,12 +206,13 @@ shf_inflow model =
 change_room_t: Model -> TemperatureRate
 change_room_t model =
     let
-        (BtuPerF cp) = specific_heat_of_building
+        (BtuPerF cp) = building_heat_capacitance
         load = inBtusPerHour model.load
         supply = inBtusPerHour <| cool_supply model
+        shf = model.shf
         (LbPerCubicFoot rho) = air_density
     in
-        FahrenheitPerHour (((load*model.shf - supply)/cp))
+        FahrenheitPerHour (((load*shf - supply)/cp))
 
 -- FIXME: This looks wrong
 change_room_rel_humidity: Model -> RelativeHumidityRate
