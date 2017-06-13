@@ -15,6 +15,7 @@ type AirFlow = CubicFeetPerMinute Float
 type alias Percent = Float
 type Density = LbPerCubicFoot Float
 type SpecificHeat = BtuPerLbF Float
+type SpecificHeatExtensive = BtuPerF Float
 type Power = BtuPerHour Float | Tons Float
 type alias Air = { t : Temperature
                  , rh : RelativeHumidity
@@ -26,6 +27,8 @@ atm = PSI 14.696 -- standard atmosphere
 
 specific_heat_air: SpecificHeat
 specific_heat_air = BtuPerLbF 0.241
+
+specific_heat_of_building = BtuPerF 100000
 
 air_density: Density
 air_density = LbPerCubicFoot (1/13.2)
@@ -203,9 +206,10 @@ shf_inflow model =
 change_room_t: Model -> TemperatureRate
 change_room_t model =
     let
-        (BtuPerLbF cp) = specific_heat_air
+        (BtuPerF cp) = specific_heat_of_building
         load = inBtusPerHour model.load
         supply = inBtusPerHour <| cool_supply model
+        (LbPerCubicFoot rho) = air_density
     in
         FahrenheitPerHour (((load*model.shf - supply)/cp))
 
