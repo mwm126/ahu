@@ -110,7 +110,7 @@ subscriptions model = Time.every (0.1 * second) Tick
 ctrl_style: Html.Attribute Msg
 ctrl_style = Html.Attributes.style
         [ ( "float", "left" )
-        , ( "width", "50%" )
+        , ( "width", "65%" )
         , ( "display", "inline-block" )
         ]
 
@@ -124,8 +124,8 @@ show_style = Html.Attributes.style
 view : Model -> Html Msg
 view model =
     let
-        pro_x = 250.0
-        pro_y = 30
+        pro_x = 150
+        pro_y = 150
         r2 x = toString <| roundn 20 x
         show name value = Html.text (name ++ " = " ++ r2 value)
 
@@ -503,6 +503,7 @@ psych_chart model =
         c4 = th_to_xy (comfort_temp_max, humidity_ratio { rh=comfort_rh_min, t=comfort_temp_max})
         x_axis_label = Svg.text_ [x "350", y "370", fontSize "10"] [Html.text "Temperature"]
         y_axis_label = Svg.text_ [x "470", y "100", fontSize "10", writingMode "tb"] [Html.text "Specific Humidity"]
+        comfort_label = Svg.text_ [x "270", y "350", fontSize "10", stroke "blue" ] [Html.text "Comfort Zone"]
         -- y_axis_label = Svg.text_ [] [Html.text "Specific Humidity"]
         comfort_zone = [ make_line r c1 c2
                        , make_line r c2 c3
@@ -522,6 +523,7 @@ psych_chart model =
                     , comfort_zone
                     , [ x_axis_label
                       , y_axis_label
+                      , comfort_label
                       ]
                     ]
 
