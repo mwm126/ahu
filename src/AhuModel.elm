@@ -112,19 +112,6 @@ enthalpy absolute_humidity temperature =
     in
         BTUsPerPound ((0.24+0.444*w)*t + 1061*w)
 
-water_pp: Air -> Float
-water_pp air =
-    let
-        t = air.t
-        p_h2o_sat = h2o_saturation_vapor_pressure t
-        p_h2o_sat_psi = inPSI p_h2o_sat
-        (HPercent rh) = air.rh
-        h2o_partial_pressure = p_h2o_sat_psi * rh/100
-        p_h2o = h2o_partial_pressure
-    in
-        p_h2o
-
-
 -- mass of water vapor per mass of air; dimensionless
 humidity_ratio: Air -> HumidityRatio
 humidity_ratio air =
@@ -138,13 +125,8 @@ humidity_ratio air =
         h2o_partial_pressure = p_h2o_sat_psi * rh/100
         p_h2o = h2o_partial_pressure
         p_air = inPSI atm
-        xxx = (0.62198*(p_h2o/(p_air - p_h2o)))
     in
-        -- if p_air > p_h2o
-        --     then
-                MolecularRatio (0.62198*(p_h2o/(p_air - p_h2o)))
-            -- else
-            --     MolecularRatio -111111
+        MolecularRatio (0.62198*(p_h2o/(p_air - p_h2o)))
 
 
 -- total heat flow in
@@ -176,9 +158,11 @@ q_sensible model =
         rho = inLbPerCubicFoot air_density
         (CubicFeetPerMinute cfm) = model.cfm
         lb_air_per_hour = 60 * cfm * rho
+
         building_t = inFahrenheit model.building_air.t
         supply_t = inFahrenheit model.supply_air.t
         delta_t = building_t - supply_t
+
         (BtuPerLbF cp) = specific_heat_air
         load = lb_air_per_hour*cp*delta_t
     in
@@ -191,13 +175,9 @@ supply_shf model =
         supply = inBtusPerHour <| q_sensible model
         flow = inBtusPerHour <| q_total_in model
     in
-        if supply < 0 then
-            -111111
-                else if flow < 0 then
-                         -2222222
-                             else
         supply/flow
 
+-- new building temperature after a timestep
 new_building_t: Model -> Duration -> Temperature
 new_building_t model dt =
     let
@@ -219,7 +199,7 @@ enthalpy_h2o air =
     in
         BTUsPerPound (1061 + 0.444*t)
 
--- h2o generate by load
+-- h2o generate by load in a timestep
 new_water_from_building: Model -> Duration -> Mass
 new_water_from_building model dt =
     let
@@ -230,18 +210,7 @@ new_water_from_building model dt =
     in
         Lb (time*load*(1-shf)/h_h2o)
 
--- h2o in from supply air
-supply_abs_humidity: Model -> Density
-supply_abs_humidity model =
-    let
-        (CubicFeetPerMinute supply_air_cfm) = model.cfm
-        rho = inLbPerCubicFoot air_density
-        (MolecularRatio w) = humidity_ratio model.supply_air
-        supply_abs_humidity = w * rho * supply_air_cfm
-    in
-         LbPerCubicFoot supply_abs_humidity
-
--- h2o in from supply air
+-- h2o in from supply air in a timestep
 new_water_in: Model -> Duration -> Mass
 new_water_in model dt =
     let
@@ -252,7 +221,7 @@ new_water_in model dt =
     in
         Lb (w*rho*supply_air_cfm*s)
 
--- h2o flowing out
+-- h2o flowing out in a timestep
 new_water_out: Model -> Duration -> Mass
 new_water_out model dt =
     let
@@ -263,8 +232,7 @@ new_water_out model dt =
     in
         Lb (w*rho*outflow_air_cfm*s)
 
--- rate of change of water in building
--- net water flowing into building
+-- net change of water in building in a timestep
 new_building_h2o: Model -> Duration -> Mass
 new_building_h2o model dt =
     let
@@ -294,7 +262,6 @@ new_building_rel_humidity model dt =
         new_rh = relative_humidity temperature new_ah
     in
         new_rh
-
 
 -- new building state after one hour
 new_building_air: Model -> Air
