@@ -50,10 +50,10 @@ type Msg = SetCfm String
          | Tick Time
 
 get_oa_t: Model -> Float
-get_oa_t model = inFahrenheit model.outside_air.t
+get_oa_t model = inFahrenheit model.outside_air_t
 
-get_oa_rh: Model -> Float
-get_oa_rh model = let (HPercent x) = model.outside_air.rh in x
+get_oa_wb: Model -> Float
+get_oa_wb model = inFahrenheit model.outside_air_wb
 
 get_sa_t: Model -> Float
 get_sa_t model = inFahrenheit model.supply_air.t
@@ -93,10 +93,10 @@ update msg model =
                         SetCfm f -> { model | cfm = toAirflow f }
                         SetShf f -> { model | load_shf = stringToFloat f / 100 }
                         SetTons f -> { model | load = toTons f }
-                        SetOawb rh -> { model | outside_air = { t = model.outside_air.t, rh = toHPercent rh }  }
+                        SetOawb wb -> { model | outside_air_wb = toTemp wb }
                         SetCycle f -> { model | cycle = toTime f }
                         SetSat t -> { model | supply_air = { t = toTemp t, rh = model.supply_air.rh }  }
-                        SetOat t -> { model | outside_air = { t = toTemp t, rh = model.outside_air.rh }  }
+                        SetOat t -> { model | outside_air_t = toTemp t }
                         Tick newTime -> { model | time = time_mod newTime model
                                         , building_air = new_building_air model
                                         }
@@ -146,7 +146,7 @@ view model =
                 [ Html.text "Specify the weather outdoors."
                 , div [redStyle]
                     [ control SetOat 80.0 94.0 get_oa_t "Outside Air Temp (°F)" model
-                    , control SetOawb 65.0 85.0 get_oa_rh "Outside Air Wet Bulb (°F)" model
+                    , control SetOawb 65.0 85.0 get_oa_wb "Outside Air Wet Bulb (°F)" model
                     , control SetOap 20.0 100.0 .oa_p "Outside Air %" model
                     ]
                 , Html.p [] []
@@ -368,8 +368,17 @@ building_th model = (model.building_air.t, humidity_ratio model.building_air )
 sa_th: Model -> (Temperature, HumidityRatio)
 sa_th model = (model.supply_air.t, humidity_ratio model.supply_air )
 
+wetbulb_to_specifichumidity: Temperature -> HumidityRatio
+wetbulb_to_specifichumidity temperature =
+    let
+        t = inFahrenheit temperature
+        wb = 0.025*(t-65)/(85-65) + 0.007
+    in
+        -- not accurate; just fudged estimate of specifichumidity from wetbulb
+        MolecularRatio wb
+
 outside_th: Model -> (Temperature, HumidityRatio)
-outside_th model = (model.outside_air.t, humidity_ratio model.outside_air )
+outside_th model = (model.outside_air_t, wetbulb_to_specifichumidity model.outside_air_wb)
 
 avg_th : (Temperature,HumidityRatio) -> (Temperature,HumidityRatio) -> Float -> (Temperature,HumidityRatio)
 avg_th xy1 xy2 t =

@@ -36,7 +36,8 @@ specific_gas_constant_h2o = JoulePerKgPerK 461.5
 type alias Model = { supply_air : Air
                    , oa_p : Percent --outside air percentage
                    , cfm : AirFlow -- supply air flow rate
-                   , outside_air : Air
+                   , outside_air_t : Temperature
+                   , outside_air_wb : Temperature
                    , load : Power -- building cooling load
                    , load_shf : Float -- sensible heat factor qsense/qtotal, dimensionless from 0.0 to 1.0
                    , cycle : Time -- Duration of animation cycle (Seconds)
@@ -49,14 +50,12 @@ type alias Model = { supply_air : Air
 
 init_model: Model
 init_model = { supply_air = { t = Fahrenheit 62
-                            -- , rh = supply_rel_humidity (Fahrenheit 50)
                             , rh = HPercent 95
                             }
              , oa_p = 30
              , cfm = CubicFeetPerMinute 30000
-             , outside_air = { t = Fahrenheit 90
-                             , rh = wetBulbToRelativeHumidity 84
-                             }
+             , outside_air_t = Fahrenheit 90
+             , outside_air_wb = Fahrenheit 75
              , load = Tons 65
              , load_shf = 0.90
              , cycle = 10
@@ -65,21 +64,6 @@ init_model = { supply_air = { t = Fahrenheit 62
                           , rh = HPercent 50
                           }
              }
-
-
--- supply_rel_humidity: Temperature -> RelativeHumidity
--- supply_rel_humidity supply_t =
---     let
---         t = inFahrenheit supply_t
---     in
---         if t<60 then
---             HPercent 95
---         else
---             HPercent (95 - (t - 60)*3)
-
--- FIXME: this is probably wrong
-wetBulbToRelativeHumidity: Float -> RelativeHumidity
-wetBulbToRelativeHumidity x = HPercent x
 
 -- Thermodynamic Equations
 
@@ -290,22 +274,6 @@ new_building_h2o model dt =
     in
         Lb (h2o_supply + h2o_building - h2o_outflow)
 
-latent_energy_change: Model -> Duration -> Power
-latent_energy_change model dt =
-    let
-        -- (CubicFeetPerMinute cfm) = model.cfm
-        s = inHours dt
-        -- volume_of_air_cf = cfm*s/60
-        (Lb lb_water_out) = new_water_out model dt
-        (Lb lb_water_in) = new_water_in model dt
-        lb_water_net = lb_water_in - lb_water_out
-
-        (BTUsPerPound h_h2o) = enthalpy_h2o model.supply_air
-
-        delta_lat = lb_water_net*h_h2o/s
-    in
-        BtuPerHour delta_lat
-
 -- rate of change of absolute humidity in building
 new_building_abs_humidity: Model -> Duration -> Density
 new_building_abs_humidity model dt =
@@ -323,7 +291,6 @@ new_building_rel_humidity model dt =
     let
         new_ah = new_building_abs_humidity model dt
         temperature = model.building_air.t
-        -- temperature = new_building_t model dt
         new_rh = relative_humidity temperature new_ah
     in
         new_rh
