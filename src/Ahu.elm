@@ -196,7 +196,7 @@ comfort_rh_min = HPercent 30
 room_comment: Model -> String
 room_comment model =
     let
-        (HPercent room_rh) = model.room_air.rh
+        (MolecularRatio room_rh) = humidity_ratio model.room_air
         room_t = inFahrenheit model.room_air.t
         (HPercent rh_max) = comfort_rh_max
         (HPercent rh_min) = comfort_rh_min
@@ -298,17 +298,17 @@ protractor t u model =
 -- protractor
         ]
 
-th_to_xy : (Temperature, RelativeHumidity) -> (Float, Float)
+th_to_xy : (Temperature, HumidityRatio) -> (Float, Float)
 th_to_xy (temp,rel_h) =
     let
         bottom = 400
         t = inFahrenheit temp
-        (HPercent h) = rel_h
+        (MolecularRatio h) = rel_h
     in
         ((t - 40)*(toFloat bottom-100)/(95-40) + 100, (0.029-h)*(toFloat bottom-100)/(0.029-0.0052) + 100)
 
 
-air_state : (Temperature, RelativeHumidity) -> String -> String -> String -> String -> List (Svg msg)
+air_state : (Temperature, HumidityRatio) -> String -> String -> String -> String -> List (Svg msg)
 air_state th clr label d_x d_y =
     let
         (t, h) = th
@@ -318,27 +318,27 @@ air_state th clr label d_x d_y =
         , Svg.text_ [ x (toString x_1), y (toString y_1), dx d_x, dy d_y, fontSize "10" ] [ Html.text label ]
         ]
 
-mixed_th: Model -> (Temperature, RelativeHumidity)
+mixed_th: Model -> (Temperature, HumidityRatio)
 mixed_th model = avg_th (room_th model) (outside_th model) (model.oa_p/100)
 
-room_th: Model -> (Temperature, RelativeHumidity)
-room_th model = (model.room_air.t, absToRh <| humidity_ratio model.room_air )
+room_th: Model -> (Temperature, HumidityRatio)
+room_th model = (model.room_air.t, humidity_ratio model.room_air )
 
-sa_th: Model -> (Temperature, RelativeHumidity)
-sa_th model = (model.supply_air.t, absToRh <| humidity_ratio model.supply_air )
+sa_th: Model -> (Temperature, HumidityRatio)
+sa_th model = (model.supply_air.t, humidity_ratio model.supply_air )
 
-outside_th: Model -> (Temperature, RelativeHumidity)
-outside_th model = (model.outside_air.t, absToRh <| humidity_ratio model.outside_air )
+outside_th: Model -> (Temperature, HumidityRatio)
+outside_th model = (model.outside_air.t, humidity_ratio model.outside_air )
 
-avg_th : (Temperature,RelativeHumidity) -> (Temperature,RelativeHumidity) -> Float -> (Temperature,RelativeHumidity)
+avg_th : (Temperature,HumidityRatio) -> (Temperature,HumidityRatio) -> Float -> (Temperature,HumidityRatio)
 avg_th xy1 xy2 t =
     let
-        (t1, HPercent y1) = xy1
+        (t1, MolecularRatio y1) = xy1
         x1 = inFahrenheit t1
-        (t2, HPercent y2) = xy2
+        (t2, MolecularRatio y2) = xy2
         x2 = inFahrenheit t2
     in
-        (Fahrenheit (x1 + (x2-x1)*t), HPercent (y1 + (y2-y1)*t))
+        (Fahrenheit (x1 + (x2-x1)*t), MolecularRatio (y1 + (y2-y1)*t))
 
 avg : (Float,Float) -> (Float,Float) -> Float -> (Float,Float)
 avg xy1 xy2 t =
@@ -365,8 +365,8 @@ avg_color c1 c2 t =
     in
         "#" ++ avg_int r1 r2 t ++ avg_int g1 g2 t ++ avg_int b1 b2 t
 
-type alias Sprites = { recirc_th : (Temperature,RelativeHumidity)
-                     , oa_th : (Temperature,RelativeHumidity)
+type alias Sprites = { recirc_th : (Temperature,HumidityRatio)
+                     , oa_th : (Temperature,HumidityRatio)
                      , air_location : (Float,Float)
                      , recirc_air_location : (Float,Float)
                      , air_color : String
@@ -435,8 +435,8 @@ sprite_states model =
 psych_chart : Model -> List (Svg msg)
 psych_chart model =
     let
-        mkTempRH = (\(t,x) -> (Fahrenheit t,HPercent x))
-        saturation_line : List (Temperature, RelativeHumidity)
+        mkTempRH = (\(t,x) -> (Fahrenheit t, MolecularRatio x))
+        saturation_line : List (Temperature, HumidityRatio)
         saturation_line = List.map mkTempRH [ (40.0, 0.0052)
                                             , (45.0, 0.0063)
                                             , (50.0, 0.0076)
@@ -456,10 +456,10 @@ psych_chart model =
         p_vert (x,y) = make_line "black" (x,y) (x,1000)
         r = "blue"
         some_temperature = 50 -- I don't know what this should be
-        c1 = th_to_xy (comfort_temp_min, absToRh <| humidity_ratio { rh=comfort_rh_min, t=comfort_temp_min})
-        c2 = th_to_xy (comfort_temp_min, absToRh <| humidity_ratio { rh=comfort_rh_max, t=comfort_temp_min})
-        c3 = th_to_xy (comfort_temp_max, absToRh <| humidity_ratio { rh=comfort_rh_max, t=comfort_temp_max})
-        c4 = th_to_xy (comfort_temp_max, absToRh <| humidity_ratio { rh=comfort_rh_min, t=comfort_temp_max})
+        c1 = th_to_xy (comfort_temp_min, humidity_ratio { rh=comfort_rh_min, t=comfort_temp_min})
+        c2 = th_to_xy (comfort_temp_min, humidity_ratio { rh=comfort_rh_max, t=comfort_temp_min})
+        c3 = th_to_xy (comfort_temp_max, humidity_ratio { rh=comfort_rh_max, t=comfort_temp_max})
+        c4 = th_to_xy (comfort_temp_max, humidity_ratio { rh=comfort_rh_min, t=comfort_temp_max})
         comfort_zone = [ make_line r c1 c2
                        , make_line r c2 c3
                        , make_line r c3 c4

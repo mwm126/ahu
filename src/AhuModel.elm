@@ -7,7 +7,6 @@ import Time exposing (Time, second)
 type HumidityRatio = MolecularRatio Float
 type Enthalpy = BTUsPerPound Float
 type Pressure = PSI Float | HectoPascals Float
-type AbsoluteHumidity = GramsPerMeter Float
 type RelativeHumidity = HPercent Float
 type RelativeHumidityRate = HPercentPerHour Float
 type Temperature = Fahrenheit Float | Celsius Float
@@ -15,9 +14,13 @@ type TemperatureRate = FahrenheitPerHour Float
 type AirFlow = CubicFeetPerMinute Float
 type alias Percent = Float
 type Density = LbPerCubicFoot Float
+type DensityRate = LbPerCubicFootPerHour Float
+type MassPerTime = LbPerHour Float
+type Mass = Lb Float
 type SpecificHeat = BtuPerLbF Float
 type SpecificHeatExtensive = BtuPerF Float
 type Power = BtuPerHour Float | Tons Float
+type Volume = CubicFeet Float
 type alias Air = { t : Temperature
                  , rh : RelativeHumidity
                  }
@@ -25,6 +28,9 @@ type alias Air = { t : Temperature
 -- Constants and Conversions
 atm: Pressure
 atm = PSI 14.696 -- standard atmosphere
+
+building_volume: Volume
+building_volume = CubicFeet 100000
 
 specific_heat_air: SpecificHeat
 specific_heat_air = BtuPerLbF 0.241
@@ -136,10 +142,6 @@ supply_rel_humidity supply_t =
 wetBulbToRelativeHumidity: Float -> RelativeHumidity
 wetBulbToRelativeHumidity x = HPercent x
 
--- FIXME: this is probably wrong
-absToRh: HumidityRatio -> RelativeHumidity
-absToRh (MolecularRatio ah) = HPercent ah
-
 -- Thermodynamic Equations
 
 h2o_saturation_vapor_pressure: Temperature -> Pressure
@@ -155,7 +157,7 @@ h2o_saturation_vapor_pressure temperature =
         -- sat vapor pressure
         PSI p_sat
 
-
+-- total enthalpy of the air
 enthalpy: HumidityRatio -> Temperature -> Enthalpy
 enthalpy absolute_humidity temperature =
     let
@@ -241,6 +243,77 @@ change_room_t model =
     in
         FahrenheitPerHour (((load*shf - supply)/cp))
 
+-- -- h2o in from supply air
+-- delta_water_in: Model -> Time -> Mass
+-- delta_water_in model dt =
+--     let
+--         (CubicFeetPerMinute supply_air_cfm) = model.cfm
+--         (LbPerCubicFoot rho) = air_density
+--         (MolecularRatio w) = humidity_ratio model.supply_air
+--         supply_abs_humidity = w * rho * supply_air_cfm
+--     in
+--         Lb (60*dt*supply_air_cfm*supply_abs_humidity)
+
+-- -- h2o flowing out
+-- delta_water_out: Model -> Time -> Mass
+-- delta_water_out model dt =
+--     let
+--         (CubicFeetPerMinute outflow_air_cfm) = model.cfm
+--         (LbPerCubicFoot rho) = air_density
+--         (MolecularRatio w) = humidity_ratio model.room_air
+--         room_abs_humidity = w * rho * outflow_air_cfm
+--     in
+--         Lb (60*dt*outflow_air_cfm*room_abs_humidity)
+
+-- -- enthalpy of water vapor
+-- enthalpy_h2o: Air -> Enthalpy
+-- enthalpy_h2o air =
+--     let
+--         t = inFahrenheit air.t
+--     in
+--         BTUsPerPound (1061 + 0.444*t)
+
+-- -- h2o generate by load
+-- delta_water_from_building: Model -> Time -> Mass
+-- delta_water_from_building model dt =
+--     let
+--         load = inBtusPerHour model.load
+--         shf = model.shf
+--         (BTUsPerPound h) = enthalpy_h2o model.room_air
+--     in
+--         Lb (dt*load*(1-shf)/h)
+
+-- -- rate of change of water in building
+-- delta_room_h2o: Model -> Time -> Mass
+-- delta_room_h2o model dt =
+--     let
+--         (Lb h2o_supply) = delta_water_in model dt
+--         (Lb h2o_building) = delta_water_from_building model dt
+--         (Lb h2o_outflow) = delta_water_out model dt
+--     in
+--         Lb (h2o_supply + h2o_building - h2o_outflow)
+
+
+-- -- rate of change of absolute humidity in building
+-- delta_room_abs_humidity: Model -> Time -> Density
+-- delta_room_abs_humidity model dt =
+--     let
+--         (Lb h2o_dot) = delta_room_h2o model dt
+--         (CubicFeet v) = building_volume
+--     in
+--         LbPerCubicFoot (h2o_dot/v)
+
+-- rate of change of relative humidity in building
+delta_room_rel_humidity: Model -> Time -> RelativeHumidity
+delta_room_rel_humidity model dt =
+    let
+        (MolecularRatio w) = humidity_ratio model.room_air
+        p = inPSI atm
+        p_w = p*w/(0.62198 + w)
+        p_h2o_sat = inPSI <| h2o_saturation_vapor_pressure model.room_air.t
+    in
+        HPercent (p_w / p_h2o_sat)
+
 
 -- FIXME: This looks wrong
 change_room_rel_humidity: Model -> RelativeHumidityRate
@@ -251,14 +324,22 @@ change_room_rel_humidity model =
         supply = inBtusPerHour <| cool_supply model
         (CubicFeetPerMinute sa_cfm) = model.cfm
         (MolecularRatio room_w) = humidity_ratio model.room_air
+        room_t = inFahrenheit model.room_air.t
+        -- new_room_t = room_t + change_room_t model
         (MolecularRatio supply_w) = humidity_ratio model.supply_air
+        (LbPerCubicFoot rho) = air_density
         supply_t = inFahrenheit model.supply_air.t
+        supply_h_g = (1061 + 0.444*supply_t) -- BTUsPerPound of water
         something = (1093 - 0.444*supply_t)/(13.2*12000)
         q_total = inBtusPerHour model.load
         q_sensible = shf * supply
         delta_q_latent = q_total - q_sensible
-        delta_abs_humidity = delta_q_latent / sa_cfm
-        -- saturation vapor pressure
+        delta_humidity_ratio = delta_q_latent / (sa_cfm * 60 * rho * supply_h_g)
+        w =delta_humidity_ratio
+        p = atm
+        -- p_w = p*w/(0.622 + w)
+        -- p_ws = h2o_saturation_vapor_pressure (room_t)
+        -- absolute_humidity = p_w/ p_ws
     in
         HPercentPerHour ((delta_q_latent - (room_w - supply_w)*sa_cfm*60*something)/100)
 
@@ -272,7 +353,7 @@ new_room_air model =
         (HPercent rel_h) = model.room_air.rh
         room_t = inFahrenheit model.room_air.t
         delta_t = t_dot -- change in temperature in one hour
-        scale = 0.0001
+        scale = 0.0000001
     in
         { t = Fahrenheit (room_t + delta_t*scale)
         , rh = HPercent (rel_h + delta_rh*scale)
