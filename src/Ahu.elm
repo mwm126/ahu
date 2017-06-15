@@ -31,16 +31,19 @@ init = (
         init_model
        , Cmd.none)
 
+-- Duration of animation cycle (Seconds)
+cycle: Time
+cycle = 10
+
 time_mod : Time -> Model -> Float
 time_mod time model =
     let
         t = Time.inSeconds time
-        ct = model.cycle
+        ct = cycle
     in
         (t - ct*(toFloat (floor(t/ct))))/ct
 
 type Msg = SetCfm String
-         | SetCycle String
          | SetOap String
          | SetOat String
          | SetOawb String
@@ -94,7 +97,6 @@ update msg model =
                         SetShf f -> { model | load_shf = stringToFloat f / 100 }
                         SetTons f -> { model | load = toTons f }
                         SetOawb wb -> { model | outside_air_wb = toTemp wb }
-                        SetCycle f -> { model | cycle = toTime f }
                         SetSat t -> { model | supply_air = { t = toTemp t, rh = model.supply_air.rh }  }
                         SetOat t -> { model | outside_air_t = toTemp t }
                         Tick newTime -> { model | time = time_mod newTime model
@@ -153,14 +155,13 @@ view model =
                 , Html.text "Setup the system by specifying load..."
                 , div [grayStyle]
                     [ control SetTons 40.0 100.0 get_load "Cooling Load (Tons)" model
-                    , control SetShf 0.0 100.0 ((*) 100 << .load_shf) "Load Sensible Heat Factor (%)" model -- TODO: limit precision
-                    -- , control SetCycle 0.0 30.0 .cycle "sim cycle (seconds)" model
+                    , control SetShf 40.0 100.0 ((*) 100 << .load_shf) "Load Sensible Heat Factor (%)" model -- TODO: limit precision
                     ]
                 , Html.p [] []
                 , Html.text "Now adjust the system to maintain comfort."
                 , div [blueStyle]
                     [ control SetSat 45.0 60.0 get_sa_t "Supply Air Temp" model
-                    , control SetCfm 20000.0 40000.0 get_cfm "CFM" model
+                    , control SetCfm 20000.0 50000.0 get_cfm "CFM" model
                     ]
                 , Html.text (building_comment model), Html.p [] []
                 ]
@@ -525,7 +526,7 @@ psych_chart model =
                     , List.concat [ air_state (outside_th model) "red" "Outside Air (OA)" "5" "5"
                                   , air_state (mixed_th model) "yellow" "Mixed Air (MA)" "5" "5"
                                   , air_state (building_th model) "green" "Return Air (RA)" "5" "5"
-                                  , air_state (sa_th model) "blue" "Supply Air (SA)" "5" "5"
+                                  , air_state (sa_th model) "blue" "Supply Air (SA)" "-90" "5"
                                   , air_state (.oa_th (sprite_states model)) "black" "OA" "15" "15"
                                   , air_state (.recirc_th (sprite_states model)) "black" "RA" "15" "-5"
                                   ]

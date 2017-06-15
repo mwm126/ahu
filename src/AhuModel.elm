@@ -40,7 +40,6 @@ type alias Model = { supply_air : Air
                    , outside_air_wb : Temperature
                    , load : Power -- building cooling load
                    , load_shf : Float -- sensible heat factor qsense/qtotal, dimensionless from 0.0 to 1.0
-                   , cycle : Time -- Duration of animation cycle (Seconds)
                    , time : Float -- Fraction of animation cycle complete (between 0.0 and 1.0)
                    , building_air : Air
                    }
@@ -58,7 +57,6 @@ init_model = { supply_air = { t = Fahrenheit 62
              , outside_air_wb = Fahrenheit 75
              , load = Tons 65
              , load_shf = 0.90
-             , cycle = 10
              , time = 0
              , building_air = { t = Fahrenheit 80
                           , rh = HPercent 50
