@@ -71,7 +71,7 @@ get_sa_t: Model -> Float
 get_sa_t model = inUnits model.system model.supply_air.t
 
 get_airflow: Model -> Float
-get_airflow model = inUnitsVolume model.system model.airflow
+get_airflow model = inUnitsAirflow model.system model.airflow
 
 get_load: Model -> Float
 get_load model = inUnitsPower model.system model.load
@@ -227,7 +227,7 @@ ahusim model =
                 , Html.text "Now adjust the system to maintain comfort."
                 , div [blueStyle]
                     [ control model SetSat (sa_t_range model) get_sa_t <| "Supply Air Temp " ++ inUnitsString model.system model.supply_air.t
-                    , control model SetAirflow (airflow_range model) get_airflow <| "Airflow " ++ inUnitsVolumeString model.system model.airflow
+                    , control model SetAirflow (airflow_range model) get_airflow <| "Airflow " ++ inUnitsAirflowString model.system model.airflow
                     ]
                 , Html.text (building_comment model), Html.p [] []
                 ]
@@ -725,6 +725,12 @@ view model = Material.Scheme.top <|
                    ]
              , Tabs.label
                  [ Options.center ]
+                   [ Icon.i "source"
+                   , Options.span [ css "width" "4px" ] []
+                   , Html.text "Source"
+                   ]
+             , Tabs.label
+                 [ Options.center ]
                    [ Icon.i "publication"
                    , Options.span [ css "width" "4px" ] []
                    , Html.text "Publication"
@@ -735,25 +741,20 @@ view model = Material.Scheme.top <|
                    , css "align-items" "flex-start"
                    , Options.center
                    , css "overflow-y" "auto"
-                   , css "height" "512px"
                    ]
                    [ case model.tab of
                          0 -> ahusim model
                          1 -> Html.article [] [ Markdown.toHtml [] ahuinstructions ]
+                         2 -> Html.article [] [ Markdown.toHtml [] ahusource ]
                          _ -> Html.article [] [ Markdown.toHtml [] ahutext ]
                    ]
              ]
 
-aboutTab : Html Msg
-aboutTab =
-  """
-From the [Material Design specification](https://material.google.com/components/tabs.html#tabs-usage):
-> Use tabs to organize content at a high level, for example, to present different sections of a newspaper. Don’t use tabs for carousels or pagination of content. Those use cases involve viewing content, not navigating between groups of content.
->
-> For more detail about using tabs for navigating top-level views, see “Tabs” in Patterns > Navigation.
->
-> Don't use tabs with content that supports the swipe gesture, because swipe gestures are used for navigating between tabs. For example, avoid using tabs in a map where content is pannable, or a list where items can be dismissed with a swipe.
->
-> Fixed tabs should be used with a limited number of tabs and when consistent placement will aid muscle memory. Scrollable tabs should be used when there are many or a variable number of tabs.
-    """
-       |> Markdown.toHtml []
+ahusource: String
+ahusource = """
+# Source Code
+
+This simulation is written in [Elm](http://elm-lang.org).
+
+The source code is available at: [http://github.com/mwm126/ahu](http://github.com/mwm126/ahu)
+"""

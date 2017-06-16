@@ -31,16 +31,6 @@ inCubicFeetPerMinute d = case d of
                (CubicMetersPerSecond cms) -> cms*2118.88
                (CubicFeetPerMinute cfm) -> cfm
 
-inUnitsVolume: SystemOfUnits -> AirFlow -> Float
-inUnitsVolume sys airflow = case sys of
-                               Metric -> (inCubicMetersPerSecond airflow )
-                               Imperial -> (inCubicFeetPerMinute airflow )
-
-inUnitsVolumeString: SystemOfUnits -> AirFlow -> String
-inUnitsVolumeString sys airflow = case sys of
-                               Metric -> (inCubicMetersPerSecond airflow |> roundn 1 |> toString) ++ "(cubic m/s)"
-                               Imperial -> (inCubicFeetPerMinute airflow |> roundn 1 |> toString) ++ "(cubic ft/s)"
-
 -- round x to n decimal places
 roundn : Int -> Float -> Float
 roundn n x =

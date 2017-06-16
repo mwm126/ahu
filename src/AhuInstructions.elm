@@ -1,5 +1,6 @@
 module AhuInstructions exposing (ahuinstructions)
 
+ahuinstructions: String
 ahuinstructions = """
 
 # Building Circulation
