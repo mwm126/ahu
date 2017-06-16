@@ -1,7 +1,0 @@
-Simulating the variation of shade on a house as a function of time, month, and latitude.
-
-Abstract
-
-Intro
-
-The amount of sunlight received by a building is a critical factor in the design of HVAC systems.  However, visualizing the range of motion by the sun can be difficult for students.  For this reason we have developed a Java applet to graphically demonstrate the shadow on the side of house.  The shadow is due to both the overhang of the structure and a wingwall.
