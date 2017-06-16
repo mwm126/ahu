@@ -15,6 +15,7 @@ import Html.Events exposing (onClick)
 import Markdown exposing (..)
 import Material
 import Material.Icon as Icon
+import Material.Toggles as Toggles
 import Material.Options as Options exposing (css)
 import Material.Scheme
 import Material.Tabs as Tabs
@@ -57,6 +58,7 @@ type Msg = SetAirflow String
          | SetTons String
          | Tick Time
          | SelectTab Int
+         | ToggleUnits
          | Mdl (Material.Msg Msg)
 
 get_oa_t: Model -> Float
@@ -135,6 +137,7 @@ update msg model =
                         SetOawb wb -> { model | outside_air_wb = toTemp model wb }
                         SetSat t -> { model | supply_air = { t = toTemp model t, rh = model.supply_air.rh }  }
                         SetOat t -> { model | outside_air_t = toTemp model t }
+                        ToggleUnits -> { model | system = if model.system == Metric then Imperial else Metric }
                         Tick newTime -> { model | time = time_mod newTime model
                                         , building_air = new_building_air model
                                         }
@@ -191,12 +194,22 @@ ahusim model =
         building_t = inFahrenheit model.building_air.t
         (HPercent building_rh) = model.building_air.rh
     in
-       Html.section [ Html.Attributes.style [ ( "float", "left")
-                                            , ("width", "50%")
-                                            , ("position", "fixed")
+       Html.section [ Html.Attributes.style [ ("position", "fixed")
                                             , ("padding", "1%")
                                             ] ] [
-            div [ ctrl_style ]
+            div [Html.Attributes.style [ ("right", "30px")
+                                       , ("position", "absolute")
+                                       ]]
+
+            [ Toggles.switch Mdl [0] model.mdl
+                  [ Options.onToggle ToggleUnits
+                  , Toggles.ripple
+                  , Toggles.value (model.system == Metric)
+                  ]
+                  [ Html.text "Metric?" ]
+
+            ]
+            , div [ ctrl_style ]
                 -- [ Html.text "Adjust system"
                 [ Html.text "Specify the weather outdoors."
                 , div [redStyle]
@@ -702,7 +715,7 @@ view model = Material.Scheme.top <|
                    [ Options.center ]
                    [ Icon.i "simulation"
                    , Options.span [ css "width" "4px" ] []
-                   , Html.text "AHU Simulation"
+                   , Html.text "Simulation"
                    ]
              , Tabs.label
                  [ Options.center ]
