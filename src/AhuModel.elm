@@ -1,5 +1,6 @@
 module AhuModel exposing (..)
 import Time exposing (Time, second)
+import Material
 
 import AhuUnits exposing (..)
 
@@ -42,6 +43,8 @@ type alias Model = { supply_air : Air
                    , load_shf : Float -- sensible heat factor qsense/qtotal, dimensionless from 0.0 to 1.0
                    , time : Float -- Fraction of animation cycle complete (between 0.0 and 1.0)
                    , building_air : Air
+                   , mdl : Material.Model
+                   , tab : Int
                    }
 
 
@@ -61,6 +64,8 @@ init_model = { supply_air = { t = Fahrenheit 62
              , building_air = { t = Fahrenheit 80
                           , rh = HPercent 50
                           }
+             , mdl = Material.model
+             , tab = 0
              }
 
 -- Thermodynamic Equations

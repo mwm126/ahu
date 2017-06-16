@@ -1,19 +1,24 @@
 module Ahu exposing (..)
 
-import Html exposing (Attribute, div, text, input)
-import Html.Attributes as H exposing (min, max, value)
-import Html.Events exposing (on, onInput)
-import String
-
+import AhuInstructions exposing (ahuinstructions)
 import AhuModel exposing (..)
-import AhuUnits exposing (..)
 import AhuText exposing (ahutext)
+import AhuUnits exposing (..)
 import Char exposing (..)
 import Color exposing (..)
+import Html exposing (Attribute, div, text, input)
 import Html exposing (Html, div, button, text, label)
+import Html.Attributes as H exposing (min, max, value)
 import Html.Attributes exposing (style, placeholder)
+import Html.Events exposing (on, onInput)
 import Html.Events exposing (onClick)
 import Markdown exposing (..)
+import Material
+import Material.Icon as Icon
+import Material.Options as Options exposing (css)
+import Material.Scheme
+import Material.Tabs as Tabs
+import String
 import Svg exposing (..)
 import Svg.Attributes exposing (..)
 import Time exposing (Time, second)
@@ -51,6 +56,8 @@ type Msg = SetCfm String
          | SetShf String
          | SetTons String
          | Tick Time
+         | SelectTab Int
+         | Mdl (Material.Msg Msg)
 
 get_oa_t: Model -> Float
 get_oa_t model = inFahrenheit model.outside_air_t
@@ -102,6 +109,10 @@ update msg model =
                         Tick newTime -> { model | time = time_mod newTime model
                                         , building_air = new_building_air model
                                         }
+                        SelectTab idx ->
+                            { model | tab = idx }
+                        Mdl msg_ ->
+                            Tuple.first (Material.update Mdl msg_ model)
     in
         (new_model, Cmd.none)
 
@@ -123,8 +134,8 @@ show_style = Html.Attributes.style
         , ( "display", "inline-block" )
         ]
 
-view : Model -> Html Msg
-view model =
+ahusim : Model -> Html Msg
+ahusim model =
     let
         pro_x = 150
         pro_y = 150
@@ -137,7 +148,6 @@ view model =
         building_t = inFahrenheit model.building_air.t
         (HPercent building_rh) = model.building_air.rh
     in
-  Html.article [] [
        Html.section [ Html.Attributes.style [ ( "float", "left")
                                             , ("width", "50%")
                                             , ("position", "fixed")
@@ -200,10 +210,6 @@ view model =
                                    , psych_chart model])
                 ]
            ]
-      , Html.section [ Html.Attributes.style [ ( "float", "right"), ("width", "50%"), ("overflow-y", "scroll")] ]
-           [ Html.article [] [ Markdown.toHtml [] ahutext ]
-           ]
-      ]
 
 comfort_temp_max: Temperature
 comfort_temp_max = Fahrenheit 81
@@ -610,3 +616,60 @@ pieline cx cy r t1 t2 =
         pt_string = pie_points cx cy r t1 t2
     in
         polyline [ points (String.concat (List.intersperse " " pt_string)), stroke "gray", fill "white" ] []
+
+
+
+view : Model -> Html Msg
+
+view model = Material.Scheme.top <|
+             Tabs.render Mdl [1] model.mdl
+             [ Tabs.ripple
+             , Tabs.onSelectTab SelectTab
+             , Tabs.activeTab model.tab
+             ]
+             [ Tabs.label
+                   [ Options.center ]
+                   [ Icon.i "simulation"
+                   , Options.span [ css "width" "4px" ] []
+                   , Html.text "AHU Simulation"
+                   ]
+             , Tabs.label
+                 [ Options.center ]
+                   [ Icon.i "instructions"
+                   , Options.span [ css "width" "4px" ] []
+                   , Html.text "Instructions"
+                   ]
+             , Tabs.label
+                 [ Options.center ]
+                   [ Icon.i "publication"
+                   , Options.span [ css "width" "4px" ] []
+                   , Html.text "Publication"
+                   ]
+             ]
+             [ Options.div
+                   [ css "margin" "24px auto"
+                   , css "align-items" "flex-start"
+                   , Options.center
+                   , css "overflow-y" "auto"
+                   , css "height" "512px"
+                   ]
+                   [ case model.tab of
+                         0 -> ahusim model
+                         1 -> Html.article [] [ Markdown.toHtml [] ahuinstructions ]
+                         _ -> Html.article [] [ Markdown.toHtml [] ahutext ]
+                   ]
+             ]
+
+aboutTab : Html Msg
+aboutTab =
+  """
+From the [Material Design specification](https://material.google.com/components/tabs.html#tabs-usage):
+> Use tabs to organize content at a high level, for example, to present different sections of a newspaper. Don’t use tabs for carousels or pagination of content. Those use cases involve viewing content, not navigating between groups of content.
+>
+> For more detail about using tabs for navigating top-level views, see “Tabs” in Patterns > Navigation.
+>
+> Don't use tabs with content that supports the swipe gesture, because swipe gestures are used for navigating between tabs. For example, avoid using tabs in a map where content is pannable, or a list where items can be dismissed with a swipe.
+>
+> Fixed tabs should be used with a limited number of tabs and when consistent placement will aid muscle memory. Scrollable tabs should be used when there are many or a variable number of tabs.
+    """
+       |> Markdown.toHtml []
