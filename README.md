@@ -1,4 +1,4 @@
-You can view this demo at: [http://mwm126.github.io.ahu.html](http://mwm126.github.io.ahu.html)
+You can view this demo at: [http://mwm126.github.io/ahu.html](http://mwm126.github.io/ahu.html)
 
 # Building Circulation
 
