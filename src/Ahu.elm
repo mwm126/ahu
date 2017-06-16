@@ -48,7 +48,7 @@ time_mod time model =
     in
         (t - ct*(toFloat (floor(t/ct))))/ct
 
-type Msg = SetCfm String
+type Msg = SetAirflow String
          | SetOap String
          | SetOat String
          | SetOawb String
@@ -60,19 +60,19 @@ type Msg = SetCfm String
          | Mdl (Material.Msg Msg)
 
 get_oa_t: Model -> Float
-get_oa_t model = inFahrenheit model.outside_air_t
+get_oa_t model = inUnits model.system model.outside_air_t
 
 get_oa_wb: Model -> Float
-get_oa_wb model = inFahrenheit model.outside_air_wb
+get_oa_wb model = inUnits model.system model.outside_air_wb
 
 get_sa_t: Model -> Float
-get_sa_t model = inFahrenheit model.supply_air.t
+get_sa_t model = inUnits model.system model.supply_air.t
 
-get_cfm: Model -> Float
-get_cfm model = let (CubicFeetPerMinute cfm) = model.cfm in cfm
+get_airflow: Model -> Float
+get_airflow model = inUnitsVolume model.system model.airflow
 
 get_load: Model -> Float
-get_load model = inTons model.load
+get_load model = inUnitsPower model.system model.load
 
 -- round x to n decimal places
 roundn : Int -> Float -> Float
@@ -85,10 +85,39 @@ roundn n x =
         -- toFloat (round (x*f))/f
         fh/f
 
-toTemp: String -> Temperature
-toTemp s = case String.toFloat s of
-               Ok f -> Fahrenheit f
-               Err m -> Fahrenheit 0.0
+toLoad: Model -> String -> Power
+toLoad model s =
+    let
+        d = case String.toFloat s of
+                Ok f -> f
+                Err _ -> 0.0
+    in
+        case model.system of
+            Metric -> Kilowatts d
+            Imperial -> Tons d
+
+
+toAirflow: Model -> String -> AirFlow
+toAirflow model s =
+    let
+        d = case String.toFloat s of
+                Ok f -> f
+                Err _ -> 0.0
+    in
+        case model.system of
+            Metric -> CubicMetersPerSecond d
+            Imperial -> CubicFeetPerMinute d
+
+toTemp: Model -> String -> Temperature
+toTemp model s =
+    let
+        d = case String.toFloat s of
+                Ok f -> f
+                Err _ -> 0.0
+    in
+        case model.system of
+            Metric -> Celsius d
+            Imperial -> Fahrenheit d
 
 stringToFloat: String -> Float
 stringToFloat s = case String.toFloat s of
@@ -100,12 +129,12 @@ update msg model =
     let
         new_model = case msg of
                         SetOap p -> { model | oa_p = stringToFloat p }
-                        SetCfm f -> { model | cfm = toAirflow f }
+                        SetAirflow f -> { model | airflow = toAirflow model f }
                         SetShf f -> { model | load_shf = stringToFloat f / 100 }
-                        SetTons f -> { model | load = toTons f }
-                        SetOawb wb -> { model | outside_air_wb = toTemp wb }
-                        SetSat t -> { model | supply_air = { t = toTemp t, rh = model.supply_air.rh }  }
-                        SetOat t -> { model | outside_air_t = toTemp t }
+                        SetTons f -> { model | load = toLoad model f }
+                        SetOawb wb -> { model | outside_air_wb = toTemp model wb }
+                        SetSat t -> { model | supply_air = { t = toTemp model t, rh = model.supply_air.rh }  }
+                        SetOat t -> { model | outside_air_t = toTemp model t }
                         Tick newTime -> { model | time = time_mod newTime model
                                         , building_air = new_building_air model
                                         }
@@ -134,6 +163,20 @@ show_style = Html.Attributes.style
         , ( "display", "inline-block" )
         ]
 
+type alias Range = (Float, Float)
+oa_t_range: Model -> Range
+oa_t_range model = (inUnits model.system <| Fahrenheit 80.0, inUnits model.system <| Fahrenheit 94.0)
+oawb_range: Model -> Range
+oawb_range model = (inUnits model.system <| Fahrenheit 65.0, inUnits model.system <| Fahrenheit 85.0)
+sa_t_range: Model -> Range
+sa_t_range model = (inUnits model.system <| Fahrenheit 45.0, inUnits model.system <| Fahrenheit 60.0)
+
+load_range: Model -> Range
+load_range model = (inUnitsPower model.system <| Tons 20.0, inUnitsPower model.system <| Tons 100.0)
+
+airflow_range: Model -> Range
+airflow_range model = (inUnitsAirflow model.system <| CubicFeetPerMinute 20000.0, inUnitsAirflow model.system <| CubicFeetPerMinute 50000.0)
+
 ahusim : Model -> Html Msg
 ahusim model =
     let
@@ -157,21 +200,21 @@ ahusim model =
                 -- [ Html.text "Adjust system"
                 [ Html.text "Specify the weather outdoors."
                 , div [redStyle]
-                    [ control SetOat 80.0 94.0 get_oa_t "Outside Air Temp (°F)" model
-                    , control SetOawb 65.0 85.0 get_oa_wb "Outside Air Wet Bulb (°F)" model
-                    , control SetOap 20.0 100.0 .oa_p "Outside Air %" model
+                    [ control model SetOat (oa_t_range model) get_oa_t <| "Outside Air Temp " ++ inUnitsString model.system model.outside_air_t
+                    , control model SetOawb (oawb_range model) get_oa_wb <| "Outside Air Wet Bulb " ++ inUnitsString model.system model.outside_air_wb
+                    , control model SetOap (20.0, 100.0) .oa_p <| "Outside Air " ++ toString model.oa_p ++ "%"
                     ]
                 , Html.p [] []
                 , Html.text "Setup the system by specifying load..."
                 , div [grayStyle]
-                    [ control SetTons 40.0 100.0 get_load "Cooling Load (Tons)" model
-                    , control SetShf 40.0 100.0 ((*) 100 << .load_shf) "Load Sensible Heat Factor (%)" model -- TODO: limit precision
+                    [ control model SetTons (load_range model) get_load <| "Cooling Load " ++ inUnitsPowerString model.system model.load
+                    , control model SetShf (40.0, 100.0) ((*) 100 << .load_shf) <| "Load Sensible Heat Factor " ++ toString (100*model.load_shf) ++ "%"
                     ]
                 , Html.p [] []
                 , Html.text "Now adjust the system to maintain comfort."
                 , div [blueStyle]
-                    [ control SetSat 45.0 60.0 get_sa_t "Supply Air Temp" model
-                    , control SetCfm 20000.0 50000.0 get_cfm "CFM" model
+                    [ control model SetSat (sa_t_range model) get_sa_t <| "Supply Air Temp " ++ inUnitsString model.system model.supply_air.t
+                    , control model SetAirflow (airflow_range model) get_airflow <| "Airflow " ++ inUnitsVolumeString model.system model.airflow
                     ]
                 , Html.text (building_comment model), Html.p [] []
                 ]
@@ -239,13 +282,13 @@ building_comment model =
         temp_min = inFahrenheit comfort_temp_min
     in
       if building_hr > hr_max then
-          "Ugh!  It's too humid. Humidity:"++(toString <| roundn 2 <| building_hr )
+          "Ugh!  It's too humid." -- Humidity:"++(toString <| roundn 2 <| building_hr )
       else if building_hr < hr_min then
-          "It's too dry. Humidity:"++(toString building_hr )
+          "It's too dry. " -- Humidity:"++(toString building_hr )
       else if building_t > temp_max then
-          "Whew!  It's too hot in here! Temperature:"++(toString <| roundn 2 <| building_t )
+          "Whew!  It's too hot in here! " -- Temperature:"++(toString <| roundn 2 <| building_t )
       else if building_t < temp_min then
-          "Brrr!  It's too cold in here! Temperature:"++(toString <| roundn 2 <| building_t )
+          "Brrr!  It's too cold in here! " -- Temperature:"++(toString <| roundn 2 <| building_t )
       else
           ""
 
@@ -296,8 +339,8 @@ house model =
         , coil 18
         , Svg.text_ [ x (toString coil_x), y (toString coil_y), dx "15", dy "15", fontSize "10", stroke "blue" ] [ Html.text "coil" ]
         -- , circle [ cx (toString ax), cy (toString ay), r "10", fill (sprite_states model).air_color ] [ ]
-        , pie ax ay 10 (1-model.oa_p/100-0.25) 0.75 (sprite_states model).recirc_air_color
-        , pie rx ry 10 -0.25 (1.0-model.oa_p/100-0.25) (sprite_states model).air_color
+        , pie ax ay 10 (1-model.oa_p/100-0.25) 0.75 <| toString (sprite_states model).recirc_air_color
+        , pie rx ry 10 -0.25 (1.0-model.oa_p/100-0.25) <| toString (sprite_states model).air_color
         ]
 
 
@@ -330,7 +373,7 @@ protractor t u model =
         -- [
         [ pieline x_1 y_1 (round load) 0 0.5
             -- building center
-        , Svg.text_ [ x (toString x_1), y (toString y_1), dx "5", dy "-5", fontSize "10"   ] [ Html.text "Cooling Vectors (BTU/Hr)" ]
+        , Svg.text_ [ x (toString x_1), y (toString y_1), dx "5", dy "-5", fontSize "10"   ] [ Html.text "Cooling Vectors" ]
         , circle [ cx (toString x_1), cy (toString y_1), r "4", fill "green" ] [ ]
         , Svg.text_ [ x (toString x_1), y (toString y_1), dx "5", dy "5", fontSize "10"   ] [ Html.text "building" ]
             -- load vector
@@ -355,25 +398,40 @@ th_to_xy (temp,rel_h) =
     in
         (x, y)
 
-
-air_state : (Temperature, HumidityRatio) -> String -> String -> String -> String -> List (Svg msg)
-air_state th clr label d_x d_y =
+asString: Color -> String
+asString clr =
     let
-        (t, h) = th
+        t = toRgb clr
+        hex = toRadix 16
+        r = String.padLeft 2 '0' <| hex t.red
+        b = String.padLeft 2 '0' <| hex t.blue
+        g = String.padLeft 2 '0' <| hex t.green
+    in
+        "#" ++ r ++ g ++ b
+
+air_state : (Temperature, HumidityRatio, Color) -> String -> String -> String -> List (Svg msg)
+air_state thc label d_x d_y =
+    let
+        (t, h, clr) = thc
         (x_1, y_1) = th_to_xy (t,h)
     in
-        [ circle [ cx (toString x_1), cy (toString y_1), r "4", fill clr ] [ ]
+        [ circle [ cx (toString x_1), cy (toString y_1), r "4", fill <| asString clr ] [ ]
         , Svg.text_ [ x (toString x_1), y (toString y_1), dx d_x, dy d_y, fontSize "10" ] [ Html.text label ]
+        -- , Svg.text_ [ x (toString x_1), y (toString y_1), dx d_x, dy d_y, fontSize "10" ] [ Html.text <| (toString clr) ++ (asString clr)]
         ]
 
-mixed_th: Model -> (Temperature, HumidityRatio)
-mixed_th model = avg_th (building_th model) (outside_th model) (model.oa_p/100)
+mixed_thc: Model -> (Temperature, HumidityRatio, Color)
+mixed_thc model =
+    let
+        (t,h,c) = avg_thc (building_thc model) (outside_thc model) (model.oa_p/100)
+    in
+        (t,h,Color.yellow)
 
-building_th: Model -> (Temperature, HumidityRatio)
-building_th model = (model.building_air.t, humidity_ratio model.building_air )
+building_thc: Model -> (Temperature, HumidityRatio, Color)
+building_thc model = (model.building_air.t, humidity_ratio model.building_air, Color.green)
 
-sa_th: Model -> (Temperature, HumidityRatio)
-sa_th model = (model.supply_air.t, humidity_ratio model.supply_air )
+sa_thc: Model -> (Temperature, HumidityRatio, Color)
+sa_thc model = (model.supply_air.t, humidity_ratio model.supply_air, Color.blue)
 
 wetbulb_to_specifichumidity: Temperature -> HumidityRatio
 wetbulb_to_specifichumidity temperature =
@@ -384,18 +442,19 @@ wetbulb_to_specifichumidity temperature =
         -- not accurate; just fudged estimate of specifichumidity from wetbulb
         MolecularRatio wb
 
-outside_th: Model -> (Temperature, HumidityRatio)
-outside_th model = (model.outside_air_t, wetbulb_to_specifichumidity model.outside_air_wb)
+outside_thc: Model -> (Temperature, HumidityRatio,Color)
+outside_thc model = (model.outside_air_t, wetbulb_to_specifichumidity model.outside_air_wb, Color.red)
 
-avg_th : (Temperature,HumidityRatio) -> (Temperature,HumidityRatio) -> Float -> (Temperature,HumidityRatio)
-avg_th xy1 xy2 t =
+avg_thc : (Temperature,HumidityRatio,Color) -> (Temperature,HumidityRatio,Color) -> Float -> (Temperature,HumidityRatio,Color)
+avg_thc xy1 xy2 t =
     let
-        (t1, MolecularRatio y1) = xy1
+        (t1, MolecularRatio y1, c1) = xy1
         x1 = inFahrenheit t1
-        (t2, MolecularRatio y2) = xy2
+        (t2, MolecularRatio y2, c2) = xy2
         x2 = inFahrenheit t2
+        clr = avg_color c1 c2 t
     in
-        (Fahrenheit (x1 + (x2-x1)*t), MolecularRatio (y1 + (y2-y1)*t))
+        (Fahrenheit (x1 + (x2-x1)*t), MolecularRatio (y1 + (y2-y1)*t), clr)
 
 avg : (Float,Float) -> (Float,Float) -> Float -> (Float,Float)
 avg xy1 xy2 t =
@@ -406,87 +465,98 @@ avg xy1 xy2 t =
         ((x1 + (x2-x1)*t), y1 + (y2-y1)*t)
 
 
-avg_int : Float -> Float -> Float -> String
-avg_int r1 r2 t = toRadix 16 (round (r1 + (r2-r1)*t))
+avg_int: Float -> Float -> Float -> Int
+avg_int r1 r2 t = round (r1 + (r2-r1)*t)
 
 
-avg_color : Color -> Color -> Float -> String
+avg_color : Color -> Color -> Float -> Color
 avg_color c1 c2 t =
     let
-        r1 = toFloat (Color.toRgb c1).red
-        g1 = toFloat (Color.toRgb c1).green
-        b1 = toFloat (Color.toRgb c1).blue
-        r2 = toFloat (Color.toRgb c2).red
-        g2 = toFloat (Color.toRgb c2).green
-        b2 = toFloat (Color.toRgb c2).blue
+        rgb1 = (Color.toRgb c1)
+        rgb2 = (Color.toRgb c2)
+        f = toFloat
+        (r1,g1,b1) = (f rgb1.red, f rgb1.green, f rgb1.blue)
+        (r2,g2,b2) = (f rgb2.red, f rgb2.green, f rgb2.blue)
+        -- r1 = toFloat rgb1.red
+        -- g1 = toFloat rgb1.green
+        -- b1 = toFloat rgb1.blue
+        -- r2 = toFloat rgb2.red
+        -- g2 = toFloat rgb2.green
+        -- b2 = toFloat rgb2.blue
     in
-        "#" ++ avg_int r1 r2 t ++ avg_int g1 g2 t ++ avg_int b1 b2 t
+        rgb (avg_int r1 r2 t) (avg_int g1 g2 t) (avg_int b1 b2 t)
 
-type alias Sprites = { recirc_th : (Temperature,HumidityRatio)
-                     , oa_th : (Temperature,HumidityRatio)
+type alias Sprites = { recirc_thc : (Temperature,HumidityRatio,Color)
+                     , oa_thc : (Temperature,HumidityRatio,Color)
                      , air_location : (Float,Float)
                      , recirc_air_location : (Float,Float)
-                     , air_color : String
-                     , recirc_air_color : String
+                     , air_color : Color
+                     , recirc_air_color : Color
                      }
 
+type AnimationStage = EnteringBuilding Float
+    | EnteringCooling Float
+    | ExitingBuilding Float
+    | MixingIntake Float
+
+find_stage: Model -> AnimationStage
+find_stage model =
+    let
+        t = model.time
+    in
+        if model.time < 0.25 then
+            -- passing through the building
+            ExitingBuilding ((model.time)/0.25)
+        else if model.time < 0.5 then
+                 -- exiting the building
+                 MixingIntake ((model.time-0.25)/0.25)
+             else if model.time < 0.75 then
+                      -- separate air and recirc
+                      EnteringCooling ((model.time-0.5)/0.25)
+                  else
+                      -- entering the building
+                      EnteringBuilding ((model.time-0.75)/0.25)
 
 sprite_states : Model -> Sprites
 sprite_states model =
     let
         xx = inFahrenheit house_x
         yy = house_y
+        stage = find_stage model
     in
-     if model.time < 0.25 then
-         -- passing through the building
-         let
-             pp = ((model.time)/0.25)
-         in
-             { recirc_th = building_th model
-             , oa_th = building_th model
-             , air_location = avg (xx+duct_width, yy) (xx, yy) pp
-             , recirc_air_location = avg (xx+duct_width, yy) (xx+duct_width*0.3, yy) pp
-             , air_color = avg_color green green pp
-             , recirc_air_color = avg_color green green pp
-             }
-     else if model.time < 0.5 then
-         -- exiting the building
-              let
-                  pp = ((model.time-0.25)/0.25)
-              in
-                  { recirc_th = avg_th (building_th model) (mixed_th model) pp
-                  , oa_th = avg_th (outside_th model) (mixed_th model) pp
-                  , air_location = avg (xx, yy) (xx, yy+duct_height) pp
-                  , recirc_air_location = avg (xx+duct_width*0.3, yy) (xx+duct_width*0.3, yy+duct_height) pp
-                  , air_color = avg_color green red pp
-                  , recirc_air_color = avg_color green green pp
-                  }
-
-     else if model.time < 0.75 then
-        -- separate air and recirc
-              let
-                  pp = ((model.time-0.5)/0.25)
-              in
-                  { recirc_th = avg_th (mixed_th model) (sa_th model) pp
-                  , oa_th = avg_th (mixed_th model) (sa_th model) pp
-                  , air_location = avg (xx, yy+duct_height) (xx+duct_width, yy+duct_height) pp
-                  , recirc_air_location = avg (xx+duct_width*0.3, yy+duct_height) (xx+duct_width, yy+duct_height) pp
-                  , air_color = avg_color yellow blue pp
-                  , recirc_air_color = avg_color green green pp
-              }
-     else
-         -- entering the building
-              let
-                  pp = ((model.time-0.75)/0.25)
-              in
-                  { recirc_th = avg_th (sa_th model) (building_th model) pp
-                  , oa_th = avg_th (sa_th model) (building_th model) pp
-                  , air_location = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
-                  , recirc_air_location = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
-                  , air_color = avg_color blue green pp
-                  , recirc_air_color = avg_color blue green pp
-                  }
-
+        case stage of
+            ExitingBuilding pp ->
+                { recirc_thc = building_thc model
+                , oa_thc = building_thc model
+                , air_location = avg (xx+duct_width, yy) (xx, yy) pp
+                , recirc_air_location = avg (xx+duct_width, yy) (xx+duct_width*0.3, yy) pp
+                , air_color = avg_color green green pp
+                , recirc_air_color = avg_color green green pp
+                }
+            MixingIntake pp ->
+                { recirc_thc = avg_thc (building_thc model) (mixed_thc model) pp
+                , oa_thc = avg_thc (outside_thc model) (mixed_thc model) pp
+                , air_location = avg (xx, yy) (xx, yy+duct_height) pp
+                , recirc_air_location = avg (xx+duct_width*0.3, yy) (xx+duct_width*0.3, yy+duct_height) pp
+                , air_color = avg_color green red pp
+                , recirc_air_color = avg_color green green pp
+                }
+            EnteringCooling pp ->
+                { recirc_thc = avg_thc (mixed_thc model) (sa_thc model) pp
+                , oa_thc = avg_thc (mixed_thc model) (sa_thc model) pp
+                , air_location = avg (xx, yy+duct_height) (xx+duct_width, yy+duct_height) pp
+                , recirc_air_location = avg (xx+duct_width*0.3, yy+duct_height) (xx+duct_width, yy+duct_height) pp
+                , air_color = avg_color yellow blue pp
+                , recirc_air_color = avg_color green green pp
+                }
+            EnteringBuilding pp ->
+                { recirc_thc = avg_thc (sa_thc model) (building_thc model) pp
+                , oa_thc = avg_thc (sa_thc model) (building_thc model) pp
+                , air_location = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
+                , recirc_air_location = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
+                , air_color = avg_color blue green pp
+                , recirc_air_color = avg_color blue green pp
+                }
 
 
 psych_chart : Model -> List (Svg msg)
@@ -518,8 +588,8 @@ psych_chart model =
         c3 = th_to_xy (comfort_temp_max, humidity_ratio { rh=comfort_rh_max, t=comfort_temp_max})
         c4 = th_to_xy (comfort_temp_max, humidity_ratio { rh=comfort_rh_min, t=comfort_temp_max})
         x_axis_label = Svg.text_ [x "350", y "370", fontSize "10"] [Html.text "Temperature"]
-        y_axis_label = Svg.text_ [x "470", y "100", fontSize "10", writingMode "tb"] [Html.text "Specific Humidity"]
-        comfort_label = Svg.text_ [x "270", y "350", fontSize "10", stroke "blue" ] [Html.text "Comfort Zone"]
+        y_axis_label = Svg.text_ [x "470", y "100", fontSize "10", writingMode "tb"] [Html.text "Humidity Ratio"]
+        comfort_label = Svg.text_ [x "270", y "347", fontSize "10", stroke "blue" ] [Html.text "Comfort Zone"]
         -- y_axis_label = Svg.text_ [] [Html.text "Specific Humidity"]
         comfort_zone = [ make_line r c1 c2
                        , make_line r c2 c3
@@ -529,12 +599,12 @@ psych_chart model =
     in
         List.concat [ List.map p_horiz (List.map th_to_xy saturation_line)
                     , List.map p_vert  (List.map th_to_xy saturation_line)
-                    , List.concat [ air_state (outside_th model) "red" "Outside Air (OA)" "5" "5"
-                                  , air_state (mixed_th model) "yellow" "Mixed Air (MA)" "5" "5"
-                                  , air_state (building_th model) "green" "Return Air (RA)" "5" "5"
-                                  , air_state (sa_th model) "blue" "Supply Air (SA)" "-90" "5"
-                                  , air_state (.oa_th (sprite_states model)) "black" "OA" "15" "15"
-                                  , air_state (.recirc_th (sprite_states model)) "black" "RA" "15" "-5"
+                    , List.concat [ air_state (outside_thc model) "Outside Air (OA)" "5" "5"
+                                  , air_state (mixed_thc model) "Mixed Air (MA)" "5" "5"
+                                  , air_state (building_thc model) "Return Air (RA)" "5" "5"
+                                  , air_state (sa_thc model) "Supply Air (SA)" "-90" "5"
+                                  , air_state (.oa_thc (sprite_states model)) "OA" "15" "15"
+                                  , air_state (.recirc_thc (sprite_states model)) "RA" "15" "-5"
                                   ]
                     , comfort_zone
                     , [ x_axis_label
@@ -543,9 +613,10 @@ psych_chart model =
                       ]
                     ]
 
-control: (String -> Msg) -> Float -> Float -> (Model -> Float) -> String -> Model -> (Html Msg)
-control set minval maxval get label model =
+control: Model -> (String -> Msg) -> Range -> (Model -> Float) -> String -> (Html Msg)
+control model set range get label =
     let
+        (minval, maxval) = range
         val = toString << roundn 2 << get <| model
     in
     div []
@@ -556,7 +627,7 @@ control set minval maxval get label model =
               , value val
               , onInput set
               ] []
-        , Html.text (label ++ " " ++ val)
+        , Html.text label
         ]
 
 inlineStyle: Html.Attribute Msg

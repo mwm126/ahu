@@ -3,13 +3,13 @@ module AhuUnits exposing (..)
 import Time exposing (Time, second)
 
 type AbsoluteHumidity = AirDensity Float
-type AirFlow = CubicFeetPerMinute Float
+type AirFlow = CubicFeetPerMinute Float | CubicMetersPerSecond Float
 type Density = LbPerCubicFoot Float | KgPerCubicMeter Float
 type Enthalpy = BTUsPerPound Float
 type Energy = BTU Float
 type HumidityRatio = MolecularRatio Float
 type Mass = Lb Float
-type Power = BtuPerHour Float | Tons Float
+type Power = BtuPerHour Float | Tons Float | Kilowatts Float
 type Pressure = PSI Float | HectoPascal Float | Pascal Float
 type RelativeHumidity = HPercent Float
 type RelativeHumidityRate = HPercentPerHour Float
@@ -20,6 +20,37 @@ type Temperature = Fahrenheit Float | Celsius Float | Kelvin Float
 type Volume = CubicFeet Float
 type Duration = Seconds Float | Minutes Float | Hours Float
 type alias Percent = Float
+
+inCubicMetersPerSecond: AirFlow -> Float
+inCubicMetersPerSecond d = case d of
+               (CubicMetersPerSecond cms) -> cms
+               (CubicFeetPerMinute cfm) -> cfm*0.000471947
+
+inCubicFeetPerMinute: AirFlow -> Float
+inCubicFeetPerMinute d = case d of
+               (CubicMetersPerSecond cms) -> cms*2118.88
+               (CubicFeetPerMinute cfm) -> cfm
+
+inUnitsVolume: SystemOfUnits -> AirFlow -> Float
+inUnitsVolume sys airflow = case sys of
+                               Metric -> (inCubicMetersPerSecond airflow )
+                               Imperial -> (inCubicFeetPerMinute airflow )
+
+inUnitsVolumeString: SystemOfUnits -> AirFlow -> String
+inUnitsVolumeString sys airflow = case sys of
+                               Metric -> (inCubicMetersPerSecond airflow |> roundn 1 |> toString) ++ "(cubic m/s)"
+                               Imperial -> (inCubicFeetPerMinute airflow |> roundn 1 |> toString) ++ "(cubic ft/s)"
+
+-- round x to n decimal places
+roundn : Int -> Float -> Float
+roundn n x =
+    let
+        f = toFloat ( 10^n )
+        scaled = f*x
+        fh = toFloat (round scaled)
+    in
+        -- toFloat (round (x*f))/f
+        fh/f
 
 inPercent: RelativeHumidity -> Float
 inPercent (HPercent p) = p
@@ -96,19 +127,58 @@ inFahrenheit t = case t of
                (Celsius d) -> d*9/5 + 32
                (Kelvin d) -> (d-273.15)*9/5 + 32
 
+type SystemOfUnits = Metric | Imperial
+
+inUnits: SystemOfUnits -> Temperature -> Float
+inUnits sys temperature = case sys of
+                               Metric -> inCelsius temperature
+                               Imperial -> inFahrenheit temperature
+
+inUnitsString: SystemOfUnits -> Temperature -> String
+inUnitsString sys temperature = case sys of
+                               Metric -> (inCelsius temperature |> roundn 1 |> toString) ++ "(°C)"
+                               Imperial -> (inFahrenheit temperature |> roundn 1 |> toString) ++ "(°F)"
+
+inUnitsPower: SystemOfUnits -> Power -> Float
+inUnitsPower sys power = case sys of
+                               Metric -> inKilowatts power
+                               Imperial -> inTons power
+
+inUnitsPowerString: SystemOfUnits -> Power -> String
+inUnitsPowerString sys power = case sys of
+                               Metric -> (inKilowatts power |> roundn 1 |> toString) ++ "(kW)"
+                               Imperial -> (inTons power |> roundn 1 |> toString) ++ " (tons)"
+
+inUnitsAirflow: SystemOfUnits -> AirFlow -> Float
+inUnitsAirflow sys airflow = case sys of
+                               Metric -> inCubicMetersPerSecond airflow
+                               Imperial -> inCubicFeetPerMinute airflow
+
+inUnitsAirflowString: SystemOfUnits -> AirFlow -> String
+inUnitsAirflowString sys airflow = case sys of
+                               Metric -> (inCubicMetersPerSecond airflow |> roundn 1 |> toString) ++ "(cubic m/s)"
+                               Imperial -> (inCubicFeetPerMinute airflow |> roundn 1 |> toString) ++ " (cfm)"
+inKilowatts: Power -> Float
+inKilowatts p = case p of
+               (BtuPerHour b) -> b*0.00029307107
+               (Kilowatts kw) -> kw
+               (Tons t) -> t*3.5168
+
 inTons: Power -> Float
 inTons p = case p of
                (BtuPerHour b) -> (b/12000)
+               (Kilowatts kw) -> kw/3.5168525
                (Tons t) -> t
-
-inBtusPerLb: Enthalpy -> Float
-inBtusPerLb p = case p of
-               (BTUsPerPound b) -> b
 
 inBtusPerHour: Power -> Float
 inBtusPerHour p = case p of
                (BtuPerHour b) -> b
+               (Kilowatts kw) -> kw*3412.142
                (Tons t) -> t*12000
+
+inBtusPerLb: Enthalpy -> Float
+inBtusPerLb p = case p of
+               (BTUsPerPound b) -> b
 
 toTime: String -> Time
 toTime s = case String.toFloat s of
@@ -119,11 +189,6 @@ toTons: String -> Power
 toTons s = case String.toFloat s of
                Ok f -> Tons f
                Err m -> Tons 0.0
-
-toAirflow: String -> AirFlow
-toAirflow s = case String.toFloat s of
-               Ok f -> CubicFeetPerMinute f
-               Err m -> CubicFeetPerMinute 0.0
 
 toHPercent: String -> RelativeHumidity
 toHPercent s = case String.toFloat s of

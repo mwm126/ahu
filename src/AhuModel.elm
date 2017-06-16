@@ -1,5 +1,4 @@
 module AhuModel exposing (..)
-import Time exposing (Time, second)
 import Material
 
 import AhuUnits exposing (..)
@@ -36,7 +35,7 @@ specific_gas_constant_h2o = JoulePerKgPerK 461.5
 
 type alias Model = { supply_air : Air
                    , oa_p : Percent --outside air percentage
-                   , cfm : AirFlow -- supply air flow rate
+                   , airflow : AirFlow -- supply air flow rate
                    , outside_air_t : Temperature
                    , outside_air_wb : Temperature
                    , load : Power -- building cooling load
@@ -45,6 +44,7 @@ type alias Model = { supply_air : Air
                    , building_air : Air
                    , mdl : Material.Model
                    , tab : Int
+                   , system : SystemOfUnits
                    }
 
 
@@ -55,7 +55,7 @@ init_model = { supply_air = { t = Fahrenheit 62
                             , rh = HPercent 95
                             }
              , oa_p = 30
-             , cfm = CubicFeetPerMinute 30000
+             , airflow = CubicFeetPerMinute 30000
              , outside_air_t = Fahrenheit 90
              , outside_air_wb = Fahrenheit 75
              , load = Tons 65
@@ -66,6 +66,7 @@ init_model = { supply_air = { t = Fahrenheit 62
                           }
              , mdl = Material.model
              , tab = 0
+             , system = Imperial
              }
 
 -- Thermodynamic Equations
@@ -147,8 +148,8 @@ q_total_in model =
         delta_h = building_h - supply_h
 
         rho = inLbPerCubicFoot air_density
-        (CubicFeetPerMinute cfm) = model.cfm
-        sa_lb_per_hour = 60 * cfm * rho
+        airflow = inCubicFeetPerMinute model.airflow
+        sa_lb_per_hour = 60 * airflow * rho
         qinflow = sa_lb_per_hour*delta_h
     in
         BtuPerHour qinflow
@@ -159,8 +160,8 @@ q_sensible: Model -> Power
 q_sensible model =
     let
         rho = inLbPerCubicFoot air_density
-        (CubicFeetPerMinute cfm) = model.cfm
-        lb_air_per_hour = 60 * cfm * rho
+        airflow = inCubicFeetPerMinute model.airflow
+        lb_air_per_hour = 60 * airflow * rho
 
         building_t = inFahrenheit model.building_air.t
         supply_t = inFahrenheit model.supply_air.t
@@ -217,23 +218,23 @@ new_water_from_building model dt =
 new_water_in: Model -> Duration -> Mass
 new_water_in model dt =
     let
-        (CubicFeetPerMinute supply_air_cfm) = model.cfm
+        supply_air_airflow = inCubicFeetPerMinute model.airflow
         rho = inLbPerCubicFoot air_density
         (MolecularRatio w) = humidity_ratio model.supply_air
         s = inMinutes dt
     in
-        Lb (w*rho*supply_air_cfm*s)
+        Lb (w*rho*supply_air_airflow*s)
 
 -- h2o flowing out in a timestep
 new_water_out: Model -> Duration -> Mass
 new_water_out model dt =
     let
-        (CubicFeetPerMinute outflow_air_cfm) = model.cfm
+        outflow_air_airflow = inCubicFeetPerMinute model.airflow
         rho = inLbPerCubicFoot air_density
         (MolecularRatio w) = humidity_ratio model.building_air
         s = inMinutes dt
     in
-        Lb (w*rho*outflow_air_cfm*s)
+        Lb (w*rho*outflow_air_airflow*s)
 
 -- net change of water in building in a timestep
 new_building_h2o: Model -> Duration -> Mass
