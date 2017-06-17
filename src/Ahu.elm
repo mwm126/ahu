@@ -352,8 +352,8 @@ house model =
         , coil 18
         , Svg.text_ [ x (toString coil_x), y (toString coil_y), dx "15", dy "15", fontSize "10", stroke "blue" ] [ Html.text "coil" ]
         -- , circle [ cx (toString ax), cy (toString ay), r "10", fill (sprite_states model).air_color ] [ ]
-        , pie ax ay 10 (1-model.oa_p/100-0.25) 0.75 <| toString (sprite_states model).recirc_air_color
-        , pie rx ry 10 -0.25 (1.0-model.oa_p/100-0.25) <| toString (sprite_states model).air_color
+        , pie ax ay 10 (1-model.oa_p/100-0.25) 0.75 <| asString (sprite_states model).recirc_air_color
+        , pie rx ry 10 -0.25 (1.0-model.oa_p/100-0.25) <| asString (sprite_states model).air_color
         ]
 
 
@@ -444,7 +444,7 @@ building_thc: Model -> (Temperature, HumidityRatio, Color)
 building_thc model = (model.building_air.t, humidity_ratio model.building_air, Color.green)
 
 sa_thc: Model -> (Temperature, HumidityRatio, Color)
-sa_thc model = (model.supply_air.t, humidity_ratio model.supply_air, Color.blue)
+sa_thc model = (model.supply_air.t, humidity_ratio model.supply_air, Color.lightBlue)
 
 wetbulb_to_specifichumidity: Temperature -> HumidityRatio
 wetbulb_to_specifichumidity temperature =
@@ -551,8 +551,8 @@ sprite_states model =
                 , oa_thc = avg_thc (outside_thc model) (mixed_thc model) pp
                 , air_location = avg (xx, yy) (xx, yy+duct_height) pp
                 , recirc_air_location = avg (xx+duct_width*0.3, yy) (xx+duct_width*0.3, yy+duct_height) pp
-                , air_color = avg_color green red pp
-                , recirc_air_color = avg_color green green pp
+                , air_color = avg_color green green pp
+                , recirc_air_color = avg_color green red pp
                 }
             EnteringCooling pp ->
                 { recirc_thc = avg_thc (mixed_thc model) (sa_thc model) pp
