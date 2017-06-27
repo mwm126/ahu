@@ -152,11 +152,17 @@ update msg model =
 subscriptions : Model -> Sub Msg
 subscriptions model = Time.every (0.1 * second) Tick
 
+control_style: Html.Attribute Msg
+control_style = Html.Attributes.style
+        [
+        ( "padding", "5px 10px" )
+        ]
+
 ctrl_style: Html.Attribute Msg
 ctrl_style = Html.Attributes.style
-        [ ( "float", "left" )
-        , ( "width", "65%" )
-        , ( "display", "inline-block" )
+        [
+        ( "display", "inline-block" )
+        , ( "text-align", "left" )
         ]
 
 show_style: Html.Attribute Msg
@@ -194,24 +200,21 @@ ahusim model =
         building_t = inFahrenheit model.building_air.t
         (HPercent building_rh) = model.building_air.rh
     in
-       Html.section [ Html.Attributes.style [ ("position", "fixed")
-                                            , ("padding", "1%")
-                                            ] ] [
-            div [Html.Attributes.style [ ("right", "30px")
-                                       , ("position", "absolute")
-                                       ]]
-
-            [ Toggles.switch Mdl [0] model.mdl
+       Html.section [ Html.Attributes.style [
+                           ("width", "100%"),
+                           ("text-align", "center")
+                          ]
+                    ]
+           [ div [ ctrl_style ]
+                [
+                Toggles.switch Mdl [0] model.mdl
                   [ Options.onToggle ToggleUnits
                   , Toggles.ripple
                   , Toggles.value (model.system == Metric)
                   ]
-                  [ Html.text "Metric?" ]
+                  [ Html.text "Metric?" ],
 
-            ]
-            , div [ ctrl_style ]
-                -- [ Html.text "Adjust system"
-                [ Html.text "Specify the weather outdoors."
+                 Html.text "Specify the weather outdoors."
                 , div [redStyle]
                     [ control model SetOat (oa_t_range model) get_oa_t <| "Outside Air Temp " ++ inUnitsString model.system model.outside_air_t
                     , control model SetOawb (oawb_range model) get_oa_wb <| "Outside Air Wet Bulb " ++ inUnitsString model.system model.outside_air_wb
@@ -231,9 +234,9 @@ ahusim model =
                     ]
                 , Html.text (building_comment model), Html.p [] []
                 ]
-           , div [ show_style ]
-                [
-                Html.text "", Html.p [] []
+           -- , div [ show_style ]
+                -- [
+                -- Html.text "", Html.p [] []
                  -- Html.text "The results are:", Html.p [] []
                 -- , show "saturation vapor pressure" (inPSI <| saturation_vapor_pressure (Fahrenheit 53) atm), Html.p [] []
                 -- , show "load shf" (model.load_shf), Html.p [] []
@@ -258,8 +261,12 @@ ahusim model =
                 -- , show "q_sensible :" q_sens, Html.p [] []
                 -- , show "building_abs_hum" <| building_rh, Html.p [] []
                 -- , show "time" <| model.time, Html.p [] []
-                ]
-           , div [ Html.Attributes.style [ ( "margin-left", "100px")] ]
+                -- ]
+           , div [ Html.Attributes.style [ ( "margin-left", "10px"),
+                                           ( "display", "inline-block" ),
+                                           ( "vertical-align", "top" ),
+                                           ( "border", "1px solid black" ),
+                                           ( "width", "50%")] ]
                 [ svg [viewBox "0 0 600 400", Svg.Attributes.width "100%" ]
                       (List.concat [ (protractor pro_x pro_y model)
                                    , house model
@@ -287,8 +294,6 @@ building_comment model =
     let
         (MolecularRatio building_hr) = humidity_ratio model.building_air
         building_t = inFahrenheit model.building_air.t
-        -- (HPercent rh_max) = comfort_rh_max
-        -- (HPercent rh_min) = comfort_rh_min
         (MolecularRatio hr_max) = comfort_hr_max
         (MolecularRatio hr_min) = comfort_hr_min
         temp_max = inFahrenheit comfort_temp_max
@@ -490,12 +495,6 @@ avg_color c1 c2 t =
         f = toFloat
         (r1,g1,b1) = (f rgb1.red, f rgb1.green, f rgb1.blue)
         (r2,g2,b2) = (f rgb2.red, f rgb2.green, f rgb2.blue)
-        -- r1 = toFloat rgb1.red
-        -- g1 = toFloat rgb1.green
-        -- b1 = toFloat rgb1.blue
-        -- r2 = toFloat rgb2.red
-        -- g2 = toFloat rgb2.green
-        -- b2 = toFloat rgb2.blue
     in
         rgb (avg_int r1 r2 t) (avg_int g1 g2 t) (avg_int b1 b2 t)
 
@@ -632,7 +631,7 @@ control model set range get label =
         (minval, maxval) = range
         val = toString << roundn 2 << get <| model
     in
-    div []
+    div [ control_style ]
         [ input
               [ type_ "range"
               , H.min <| toString minval
