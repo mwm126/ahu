@@ -14,7 +14,6 @@ import Html.Events exposing (on, onInput)
 import Html.Events exposing (onClick)
 import Markdown exposing (..)
 import Material
-import Material.Icon as Icon
 import Material.Toggles as Toggles
 import Material.Options as Options exposing (css)
 import Material.Scheme
@@ -538,13 +537,17 @@ sprite_states model =
     in
         case stage of
             ExitingBuilding pp ->
-                { recirc_thc = building_thc model
-                , oa_thc = building_thc model
-                , air_location = avg (xx+duct_width, yy) (xx, yy) pp
-                , recirc_air_location = avg (xx+duct_width, yy) (xx+duct_width*0.3, yy) pp
-                , air_color = avg_color green green pp
-                , recirc_air_color = avg_color green green pp
-                }
+                let
+                    th_xy = building_thc model
+                    pie_color = avg_color green green pp
+                in
+                  { recirc_thc = th_xy
+                  , oa_thc = th_xy
+                  , air_location = avg (xx+duct_width, yy) (xx, yy) pp
+                  , recirc_air_location = avg (xx+duct_width, yy) (xx+duct_width*0.3, yy) pp
+                  , air_color = pie_color
+                  , recirc_air_color = pie_color
+                  }
             MixingIntake pp ->
                 { recirc_thc = avg_thc (building_thc model) (mixed_thc model) pp
                 , oa_thc = avg_thc (outside_thc model) (mixed_thc model) pp
@@ -554,21 +557,43 @@ sprite_states model =
                 , recirc_air_color = avg_color green red pp
                 }
             EnteringCooling pp ->
-                { recirc_thc = avg_thc (mixed_thc model) (sa_thc model) pp
-                , oa_thc = avg_thc (mixed_thc model) (sa_thc model) pp
-                , air_location = avg (xx, yy+duct_height) (xx+duct_width, yy+duct_height) pp
-                , recirc_air_location = avg (xx+duct_width*0.3, yy+duct_height) (xx+duct_width, yy+duct_height) pp
-                , air_color = avg_color yellow blue pp
-                , recirc_air_color = avg_color green green pp
-                }
+                let
+                    th_xy =
+                        let
+                            (mix_t,mix_h,_) =  mixed_thc model
+                        in
+                            if pp < 0.5 then
+                                let
+                                    (avg_t,avg_h,c) = avg_thc (mixed_thc model) (sa_thc model) pp
+                                in
+                                    (avg_t,mix_h,c)
+                            else
+                                let
+                                    (half_t,_,c) = avg_thc (mixed_thc model) (sa_thc model) 0.5
+                                in
+                                    avg_thc (half_t,mix_h,c) (sa_thc model) (2*pp-1)
+                    pie_color = avg_color green green pp
+                in
+                  { recirc_thc = th_xy
+                  , oa_thc = th_xy
+                  , air_location = avg (xx, yy+duct_height) (xx+duct_width, yy+duct_height) pp
+                  , recirc_air_location = avg (xx+duct_width*0.3, yy+duct_height) (xx+duct_width, yy+duct_height) pp
+                  , air_color = avg_color yellow blue pp
+                  , recirc_air_color = avg_color green green pp
+                  }
             EnteringBuilding pp ->
-                { recirc_thc = avg_thc (sa_thc model) (building_thc model) pp
-                , oa_thc = avg_thc (sa_thc model) (building_thc model) pp
-                , air_location = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
-                , recirc_air_location = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
-                , air_color = avg_color blue green pp
-                , recirc_air_color = avg_color blue green pp
-                }
+                let
+                    th_xy = avg_thc (sa_thc model) (building_thc model) pp
+                    pie_xy = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
+                    pie_color = avg_color blue green pp
+                in
+                  { recirc_thc = th_xy
+                  , oa_thc = th_xy
+                  , air_location = pie_xy
+                  , recirc_air_location = pie_xy
+                  , air_color = pie_color
+                  , recirc_air_color = pie_color
+                  }
 
 
 psych_chart : Model -> List (Svg msg)
@@ -589,7 +614,9 @@ psych_chart model =
                                             , (90.0, 0.029)
                                             , (95.0, 0.029)
                                             ]
+        saturation_line_xy = (List.map th_to_xy saturation_line)
         -- make_line takes pairs of (temperature, humidity) and transforms to pixels
+        make_line:  String -> (Float,Float) -> (Float,Float) -> Svg msg
         make_line c (x,y) (xx,yy) = line [ x1 (toString x), y1 (toString y), x2 (toString xx), y2 (toString yy), stroke c ] []
         p_horiz (x,y) = make_line "lightgray" (x,y) (450,y)
         p_vert (x,y) = make_line "lightgray" (x,y) (x,370)
@@ -608,9 +635,15 @@ psych_chart model =
                        , make_line r c3 c4
                        , make_line r c4 c1
                        ]
+        -- Draw the saturation line
+        sat_line_points: List ((Float,Float), (Float,Float))
+        sat_line_points = List.map2 (,) saturation_line_xy (List.drop 1 saturation_line_xy)
+        sat_line_lines: List (Svg msg)
+        sat_line_lines = List.map (\(start,end) -> make_line "black" start end) sat_line_points
     in
-        List.concat [ List.map p_horiz (List.map th_to_xy saturation_line)
-                    , List.map p_vert  (List.map th_to_xy saturation_line)
+        List.concat [ List.map p_horiz saturation_line_xy
+                    , List.map p_vert saturation_line_xy
+                    , sat_line_lines
                     , List.concat [ air_state (outside_thc model) "Outside Air (OA)" "5" "5"
                                   , air_state (mixed_thc model) "Mixed Air (MA)" "5" "5"
                                   , air_state (building_thc model) "Return Air (RA)" "5" "5"
