@@ -233,34 +233,6 @@ ahusim model =
                     ]
                 , Html.text (building_comment model), Html.p [] []
                 ]
-           -- , div [ show_style ]
-                -- [
-                -- Html.text "", Html.p [] []
-                 -- Html.text "The results are:", Html.p [] []
-                -- , show "saturation vapor pressure" (inPSI <| saturation_vapor_pressure (Fahrenheit 53) atm), Html.p [] []
-                -- , show "load shf" (model.load_shf), Html.p [] []
-                -- , show "building relative humidity" (inPercent model.building_air.rh), Html.p [] []
-                -- , show "building air partial pressure" (inPSI atm), Html.p [] []
-                -- , show "building h2o partial pressure" (water_pp  model.building_air), Html.p [] []
-                -- , show "building h2o saturation pressure" (inPSI <| h2o_saturation_vapor_pressure model.building_air.t), Html.p [] []
-                -- , show "building air humidityratio aka specifichumidity" (inHumidityRatio <| humidity_ratio model.building_air), Html.p [] []
-                -- , show "rahhahaha" (rahhahaha model timestep), Html.p [] []
-                -- , show "delta_lat" (roundn 6 <| inTons <| latent_energy_change model timestep), Html.p [] []
-                -- , show "water_in (lb/s)" (roundn 6 <| (inLb <| new_water_in model timestep)/(inSeconds timestep)), Html.p [] []
-                -- , show "water_out (lb/s)" (roundn 6 <| (inLb <| new_water_out model timestep)/(inSeconds timestep)), Html.p [] []
-                -- , show "water_out" (roundn 6 <| inLb <| new_water_out model timestep), Html.p [] []
-                -- , show "h_h2o" (roundn 6 <| inBtusPerLb <| enthalpy_h2o model.supply_air), Html.p [] []
-                -- , show "timestep: seconds " (roundn 6 <| inSeconds timestep), Html.p [] []
-                -- , show "water_from_building (lb/s)" (roundn 6 <| (inLb <| new_water_from_building model timestep)/(inSeconds timestep)), Html.p [] []
-                -- , show "h20 saturation vapor pressure" (inPSI <| h2o_saturation_vapor_pressure (Fahrenheit 80)), Html.p [] []
-                -- , show "building temperature" (roundn 6 <| building_t), Html.p [] []
-                -- , show "building relative humidity" (roundn 1 <| inPercent model.building_air.rh), Html.p [] []
-                -- , show "supply sensible heat factor:" (roundn 5 <| shf_in), Html.p [] []
-                -- , show "q_total_in :" q_in, Html.p [] []
-                -- , show "q_sensible :" q_sens, Html.p [] []
-                -- , show "building_abs_hum" <| building_rh, Html.p [] []
-                -- , show "time" <| model.time, Html.p [] []
-                -- ]
            , div [ Html.Attributes.style [ ( "margin-left", "10px"),
                                            ( "display", "inline-block" ),
                                            ( "vertical-align", "top" ),
@@ -268,7 +240,7 @@ ahusim model =
                                            ( "width", "50%")] ]
                 [ svg [viewBox "0 0 600 400", Svg.Attributes.width "100%" ]
                       (List.concat [ (protractor pro_x pro_y model)
-                                   , house model
+                                   , duct model
                                    , psych_chart model])
                 ]
            ]
@@ -313,51 +285,51 @@ building_comment model =
 air_radius: Float
 air_radius = 10
 duct_height: Float
-duct_height = 3*air_radius
+duct_height = 6*air_radius
 duct_width: Float
-duct_width = 8*air_radius
+duct_width = 12*air_radius
 -- house offsets
 house_x: Temperature
-house_x = Fahrenheit 10
+house_x = Fahrenheit 50
 house_y: Float
-house_y = 10
+house_y = 30
 
-house: Model -> List (Svg Msg)
-house model =
+duct: Model -> List (Svg Msg)
+duct model =
     let
-        roof_width = 10
-        roof_height = 10
         rr = air_radius
+        dd = 2*air_radius
         hh = duct_height
         ww = duct_width
-        rw = roof_width
-        rh = roof_height
         xx = inFahrenheit house_x
         yy = house_y
-        (ax, ay) = .air_location (sprite_states model)
-        (rx, ry) = .recirc_air_location (sprite_states model)
+        (ax, ay) = .air_location (pie_sprites model)
+        (rx, ry) = .recirc_air_location (pie_sprites model)
                    -- points in house icon
-        xs = [ 0, rw, 2*rw/3, 2*rw/3, -2*rw/3, -2*rw/3, -rw ]
-        ys = [ 0, rh, rh,       2*rh,    2*rh, rh,       rh ]
-        house_points = List.map2 (\ x y -> toString (xx+ww+rr+x) ++ "," ++ toString (yy+hh/3+y)) xs ys
+        hx = toString <| duct_width+xx
+        hy = toString <| rr + yy
+        house_side = toString <| 5*rr
+        house = Svg.image [ xlinkHref "/home-512.png", x hx, y hy, width house_side, height house_side] []
         coil_x = xx+ww*0.6
-        coil_y = yy+hh
-        coil x = line [ x1 (toString (coil_x+x)), y1 (toString (coil_y-rr)), x2 (toString (coil_x+x)), y2 (toString coil_y), stroke "blue" ] []
+        coil_y = yy+hh-rr
+        coil x = line [ x1 (toString (coil_x+x)), y1 (toString (coil_y-rr)), x2 (toString (coil_x+x)), y2 (toString (coil_y+rr)), stroke "blue" ] []
     in
         [ line [ x1 (toString xx), y1 (toString yy), x2 (toString (xx+ww)), y2 (toString yy), stroke "black" ] []
-        , rect [ Svg.Attributes.x (toString xx), Svg.Attributes.y (toString (yy + rr)), width (toString (2*rr)), height (toString (rr)), fill "gray" ] [ ]
-        , rect [ Svg.Attributes.x (toString (xx+3*rr)), Svg.Attributes.y (toString (yy + rr)), width (toString (ww-(xx+3*rr))), height (toString (rr)), fill "gray" ] [ ]
+        , rect [ x (toString xx),        y (toString (yy + dd)), width (toString dd),         height (toString dd), fill "gray" ] [ ]
+        , rect [ x (toString (xx+2*dd)), y (toString (yy + dd)), width (toString (ww-2*dd)), height (toString dd), fill "gray" ] [ ]
         , line [ x1 (toString xx), y1 (toString (yy+hh)), x2 (toString (xx+ww)), y2 (toString (yy+hh)), stroke "black" ] []
-        , polygon [ points (String.concat (List.intersperse " " house_points)), stroke "black" ] []
+        , house
         , coil 10
-        , coil 12
         , coil 14
-        , coil 16
         , coil 18
-        , Svg.text_ [ x (toString coil_x), y (toString coil_y), dx "15", dy "15", fontSize "10", stroke "blue" ] [ Html.text "coil" ]
+        , coil 22
+        , coil 26
+        , Svg.text_ [ x (toString coil_x), y (toString coil_y), dx "15", dy "25", fontSize "10", stroke "blue" ] [ Html.text "coil" ]
+        , Svg.text_ [x (toString xx), y (toString yy), dx "-10", dy "5", fontSize "10", writingMode "tb", stroke "lightgray"] [Html.text "outside"]
+        , Svg.text_ [x (toString <| xx+duct_width), y (toString yy), dx "10", dy "0", fontSize "10", stroke "lightgray"] [Html.text "inside"]
         -- , circle [ cx (toString ax), cy (toString ay), r "10", fill (sprite_states model).air_color ] [ ]
-        , pie ax ay 10 (1-model.oa_p/100-0.25) 0.75 <| asString (sprite_states model).recirc_air_color
-        , pie rx ry 10 -0.25 (1.0-model.oa_p/100-0.25) <| asString (sprite_states model).air_color
+        , pie ax ay 10 (1-model.oa_p/100-0.25) 0.75 <| asString (pie_sprites model).recirc_air_color
+        , pie rx ry 10 -0.25 (1.0-model.oa_p/100-0.25) <| asString (pie_sprites model).air_color
         ]
 
 
@@ -497,13 +469,15 @@ avg_color c1 c2 t =
     in
         rgb (avg_int r1 r2 t) (avg_int g1 g2 t) (avg_int b1 b2 t)
 
-type alias Sprites = { recirc_thc : (Temperature,HumidityRatio,Color)
-                     , oa_thc : (Temperature,HumidityRatio,Color)
-                     , air_location : (Float,Float)
-                     , recirc_air_location : (Float,Float)
-                     , air_color : Color
-                     , recirc_air_color : Color
-                     }
+type alias ThcSprites = { recirc_thc : (Temperature,HumidityRatio,Color)
+                        , oa_thc : (Temperature,HumidityRatio,Color)
+                        }
+
+type alias PieSprites = { air_location : (Float,Float)
+                        , recirc_air_location : (Float,Float)
+                        , air_color : Color
+                        , recirc_air_color : Color
+                        }
 
 type AnimationStage = EnteringBuilding Float
     | EnteringCooling Float
@@ -528,68 +502,91 @@ find_stage model =
                       -- entering the building
                       EnteringBuilding ((model.time-0.75)/0.25)
 
-sprite_states : Model -> Sprites
-sprite_states model =
+thc_sprites : Model -> ThcSprites
+thc_sprites model =
     let
         xx = inFahrenheit house_x
         yy = house_y
         stage = find_stage model
+        building = building_thc model
+        mixed = mixed_thc model
     in
         case stage of
             ExitingBuilding pp ->
-                let
-                    th_xy = building_thc model
-                    pie_color = avg_color green green pp
-                in
-                  { recirc_thc = th_xy
-                  , oa_thc = th_xy
-                  , air_location = avg (xx+duct_width, yy) (xx, yy) pp
-                  , recirc_air_location = avg (xx+duct_width, yy) (xx+duct_width*0.3, yy) pp
-                  , air_color = pie_color
-                  , recirc_air_color = pie_color
-                  }
+                { recirc_thc = building
+                , oa_thc = building
+                }
             MixingIntake pp ->
-                { recirc_thc = avg_thc (building_thc model) (mixed_thc model) pp
-                , oa_thc = avg_thc (outside_thc model) (mixed_thc model) pp
-                , air_location = avg (xx, yy) (xx, yy+duct_height) pp
-                , recirc_air_location = avg (xx+duct_width*0.3, yy) (xx+duct_width*0.3, yy+duct_height) pp
-                , air_color = avg_color green green pp
-                , recirc_air_color = avg_color green red pp
+                { recirc_thc = avg_thc building mixed pp
+                , oa_thc = avg_thc (outside_thc model) mixed pp
                 }
             EnteringCooling pp ->
                 let
                     th_xy =
                         let
-                            (mix_t,mix_h,_) =  mixed_thc model
+                            (mix_t,mix_h,_) =  mixed
                         in
                             if pp < 0.5 then
                                 let
-                                    (avg_t,avg_h,c) = avg_thc (mixed_thc model) (sa_thc model) pp
+                                    (avg_t,avg_h,c) = avg_thc mixed (sa_thc model) pp
                                 in
                                     (avg_t,mix_h,c)
                             else
                                 let
-                                    (half_t,_,c) = avg_thc (mixed_thc model) (sa_thc model) 0.5
+                                    (half_t,_,c) = avg_thc mixed (sa_thc model) 0.5
                                 in
                                     avg_thc (half_t,mix_h,c) (sa_thc model) (2*pp-1)
-                    pie_color = avg_color green green pp
                 in
                   { recirc_thc = th_xy
                   , oa_thc = th_xy
-                  , air_location = avg (xx, yy+duct_height) (xx+duct_width, yy+duct_height) pp
-                  , recirc_air_location = avg (xx+duct_width*0.3, yy+duct_height) (xx+duct_width, yy+duct_height) pp
+                  }
+            EnteringBuilding pp ->
+                let
+                    th_xy = avg_thc (sa_thc model) building pp
+                in
+                  { recirc_thc = th_xy
+                  , oa_thc = th_xy
+                  }
+
+pie_sprites : Model -> PieSprites
+pie_sprites model =
+    let
+        xx = inFahrenheit house_x
+        yy = house_y
+        rr = air_radius
+        stage = find_stage model
+    in
+        case stage of
+            ExitingBuilding pp ->
+                let
+                    pie_color = avg_color green green pp
+                in
+                  { air_location = avg (xx+duct_width+rr, yy+rr) (xx, yy+rr) pp
+                  , recirc_air_location = avg (xx+duct_width+rr, yy+rr) (xx+duct_width*0.3+rr, yy+rr) pp
+                  , air_color = pie_color
+                  , recirc_air_color = pie_color
+                  }
+            MixingIntake pp ->
+                { air_location = avg (xx-rr, yy+rr) (xx-rr, yy+duct_height-rr) pp
+                , recirc_air_location = avg (xx+duct_width*0.3-rr, yy+rr) (xx+duct_width*0.3-rr, yy+duct_height-rr) pp
+                , air_color = avg_color green green pp
+                , recirc_air_color = avg_color green red pp
+                }
+            EnteringCooling pp ->
+                let
+                    pie_color = avg_color green green pp
+                in
+                  { air_location = avg (xx, yy+duct_height-rr) (xx+duct_width, yy+duct_height-rr) pp
+                  , recirc_air_location = avg (xx+duct_width*0.3, yy+duct_height-rr) (xx+duct_width, yy+duct_height-rr) pp
                   , air_color = avg_color yellow blue pp
                   , recirc_air_color = avg_color green green pp
                   }
             EnteringBuilding pp ->
                 let
-                    th_xy = avg_thc (sa_thc model) (building_thc model) pp
-                    pie_xy = avg (xx+duct_width, yy+duct_height) (xx+duct_width, yy) pp
+                    pie_xy = avg (xx+duct_width+rr, yy+duct_height-rr) (xx+duct_width+rr, yy+rr) pp
                     pie_color = avg_color blue green pp
                 in
-                  { recirc_thc = th_xy
-                  , oa_thc = th_xy
-                  , air_location = pie_xy
+                  { air_location = pie_xy
                   , recirc_air_location = pie_xy
                   , air_color = pie_color
                   , recirc_air_color = pie_color
@@ -648,8 +645,8 @@ psych_chart model =
                                   , air_state (mixed_thc model) "Mixed Air (MA)" "5" "5"
                                   , air_state (building_thc model) "Return Air (RA)" "5" "5"
                                   , air_state (sa_thc model) "Supply Air (SA)" "-90" "5"
-                                  , air_state (.oa_thc (sprite_states model)) "OA" "15" "15"
-                                  , air_state (.recirc_thc (sprite_states model)) "RA" "15" "-5"
+                                  , air_state (.oa_thc (thc_sprites model)) "OA" "15" "15"
+                                  , air_state (.recirc_thc (thc_sprites model)) "RA" "15" "-5"
                                   ]
                     , comfort_zone
                     , [ x_axis_label
