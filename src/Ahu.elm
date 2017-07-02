@@ -712,26 +712,22 @@ view model = Material.Scheme.top <|
              ]
              [ Tabs.label
                    [ Options.center ]
-                   [ Icon.i "simulation"
-                   , Options.span [ css "width" "4px" ] []
+                   [ Options.span [ css "width" "0px" ] []
                    , Html.text "Simulation"
                    ]
              , Tabs.label
                  [ Options.center ]
-                   [ Icon.i "instructions"
-                   , Options.span [ css "width" "4px" ] []
+                   [ Options.span [ css "width" "4px" ] []
                    , Html.text "Instructions"
                    ]
              , Tabs.label
                  [ Options.center ]
-                   [ Icon.i "source"
-                   , Options.span [ css "width" "4px" ] []
+                   [ Options.span [ css "width" "4px" ] []
                    , Html.text "Source"
                    ]
              , Tabs.label
                  [ Options.center ]
-                   [ Icon.i "publication"
-                   , Options.span [ css "width" "4px" ] []
+                   [ Options.span [ css "width" "4px" ] []
                    , Html.text "Publication"
                    ]
              ]
