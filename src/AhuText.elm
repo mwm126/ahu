@@ -1,7 +1,9 @@
 module AhuText exposing (ahutext)
 
-ahutext: String
-ahutext = """
+
+ahutext : String
+ahutext =
+    """
 Volume 3 No.2, Spring 1999
 ISSN# 1523-9926
 
